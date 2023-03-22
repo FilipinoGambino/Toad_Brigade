@@ -25,9 +25,9 @@ ACTION_MEANINGS = {
     ],
     "city_tile": [
         "NO-OP",
-        "BUILD_WORKER",
-        "BUILD_CART",
-        "RESEARCH",
+        "BUILD_HEAVY",
+        "BUILD_LIGHT",
+        "WATER_LICHEN",
     ]
 }
 for u in ["worker", "cart"]:
