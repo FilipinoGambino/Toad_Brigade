@@ -13,8 +13,8 @@ from ..lux.game_objects import CityTile, Unit
 # The maximum number of actions that can be taken by units sharing a square
 # All remaining units take the no-op action
 MAX_OVERLAPPING_ACTIONS = 4
-DIRECTIONS = Constants.DIRECTIONS.astuple(include_center=False)
-RESOURCES = Constants.RESOURCE_TYPES.astuple()
+DIRECTIONS = Constants.DIRECTIONS
+RESOURCES = Constants.RESOURCE_TYPES
 
 ACTION_MEANINGS = {
     "worker": [
@@ -102,30 +102,30 @@ def _transfer_factory(action_meaning: str) -> Callable[..., str]:
     return _transfer_func
 
 
-ACTION_MEANING_TO_FUNC = {
-    "worker": {
+ACTION_TO_FUNC = {
+    "robot": {
         "NO-OP": _no_op,
-        "PILLAGE": _pillage,
-        "BUILD_CITY": _build_city,
+        "TRANSFER": _transfer,
+        "PICK_UP": _pick_up,
+        "DIG": _dig,
+        "SELF_DESTRUCT": _self_destruct,
+        "RECHARGE_5_STEPS": _recharge,
     },
-    "cart": {
+    "factory": {
         "NO-OP": _no_op,
-    },
-    "city_tile": {
-        "NO-OP": _no_op,
-        "BUILD_WORKER": _build_worker,
-        "BUILD_CART": _build_cart,
-        "RESEARCH": _research,
+        "BUILD_HEAVY": _build_heavy,
+        "BUILD_LIGHT": _build_light,
+        "GROW_LICHEN": _grow_lichen,
     }
 }
 for u in ["worker", "cart"]:
     for d in DIRECTIONS:
         a = f"MOVE_{d}"
-        ACTION_MEANING_TO_FUNC[u][a] = _move_factory(a)
+        ACTION_TO_FUNC[u][a] = _move_factory(a)
     for r in RESOURCES:
         for d in DIRECTIONS:
             actions_str = f"TRANSFER_{r}_{d}"
-            ACTION_MEANING_TO_FUNC[u][actions_str] = _transfer_factory(actions_str)
+            ACTION_TO_FUNC[u][actions_str] = _transfer_factory(actions_str)
 
 
 class BaseActSpace(ABC):
@@ -160,47 +160,37 @@ class BaseActSpace(ABC):
 
 
 class BasicActionSpace(BaseActSpace):
-    def __init__(self, default_board_dims: Optional[Tuple[int, int]] = None):
-        self.default_board_dims = MAX_BOARD_SIZE if default_board_dims is None else default_board_dims
+    def __init__(self, board_dims: Optional[Tuple[int, int]] = None):
+        self.board_dims = board_dims
 
     @lru_cache(maxsize=None)
     def get_action_space(self, board_dims: Optional[Tuple[int, int]] = None) -> gym.spaces.Dict:
         if board_dims is None:
-            board_dims = self.default_board_dims
-        x = board_dims[0]
-        y = board_dims[1]
+            board_dims = self.board_dims
+        x = board_dims
+        y = board_dims
         # Player count
         p = 2
         return gym.spaces.Dict({
-            "worker": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y), dtype=int) + len(ACTION_MEANINGS["worker"])),
-            "cart": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y), dtype=int) + len(ACTION_MEANINGS["cart"])),
-            "city_tile": gym.spaces.MultiDiscrete(
-                np.zeros((1, p, x, y), dtype=int) + len(ACTION_MEANINGS["city_tile"])
+            "robot": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y), dtype=int) + len(ACTION_TO_FUNC["robot"])),
+            "factory": gym.spaces.MultiDiscrete(np.zeros((1, p, x, y), dtype=int) + len(ACTION_TO_FUNC["factory"])
             ),
         })
-
-    @lru_cache(maxsize=None)
-    def get_action_space_expanded_shape(self, *args, **kwargs) -> Dict[str, Tuple[int, ...]]:
-        action_space = self.get_action_space(*args, **kwargs)
-        action_space_expanded = {}
-        for key, val in action_space.spaces.items():
-            action_space_expanded[key] = val.shape + (len(ACTION_MEANINGS[key]),)
-        return action_space_expanded
 
     def process_actions(
             self,
             action_tensors_dict: Dict[str, np.ndarray],
             game_state: Game,
-            board_dims: Tuple[int, int],
+            board_dim: int,
             pos_to_unit_dict: Dict[Tuple, Optional[Unit]]
     ) -> Tuple[List[List[str]], Dict[str, np.ndarray]]:
         action_strs = [[], []]
         actions_taken = {
-            key: np.zeros(space, dtype=bool) for key, space in self.get_action_space_expanded_shape(board_dims).items()
+            key: np.zeros(space, dtype=bool) for key, space in self.get_action_space(board_dim).items()
         }
         for player in game_state.players:
             p_id = player.team
-            worker_actions_taken_count = np.zeros(board_dims, dtype=int)
+            worker_actions_taken_count = np.zeros(board_dim, dtype=int)
             cart_actions_taken_count = np.zeros_like(worker_actions_taken_count)
             for unit in player.units:
                 if unit.can_act():

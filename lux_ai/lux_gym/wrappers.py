@@ -3,11 +3,26 @@ import gym
 import numpy as np
 import torch
 from typing import Dict, List, NoReturn, Optional, Tuple, Union
+import numpy.typing as npt
 
 from .act_spaces import ACTION_MEANINGS
 from .lux_env import LuxEnv
 from .reward_spaces import BaseRewardSpace
 from ..utility_constants import MAX_BOARD_SIZE
+
+
+class SharedObs(gym.Wrapper):
+    @staticmethod
+    def _get_shared_observation(obs: Dict[str, np.array]) -> np.array:
+        assert obs['player_0'] == obs['player_1'], "player observations not identical"
+        shared_obs = obs['player_0']
+        return shared_obs
+
+    def reset(self, **kwargs):
+        return SharedObs._get_shared_observation(super(SharedObs, self).reset(**kwargs))
+
+    def step(self, action):
+        return SharedObs._get_shared_observation(super(SharedObs, self).step(action))
 
 
 class PadFixedShapeEnv(gym.Wrapper):

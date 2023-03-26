@@ -1,5 +1,6 @@
 class Constants:
 
+    # noinspection PyPep8Naming
     class DIRECTIONS:
         CENTER = 0
         UP = 1
