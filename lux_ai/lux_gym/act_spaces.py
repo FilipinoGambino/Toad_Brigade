@@ -10,6 +10,15 @@ from ..lux.constants import Constants
 from ..lux.game import Game
 from ..lux.game_objects import CityTile, Unit
 
+from lux.utils import direction_to
+from lux.kit import obs_to_game_state, GameState
+from lux.kit import obs_to_game_state, GameState, EnvConfig
+from luxai_s2.utils import animate
+from lux.utils import direction_to, my_turn_to_place_factory
+from luxai_s2.env import LuxAI_S2
+from 
+
+
 # The maximum number of actions that can be taken by units sharing a square
 # All remaining units take the no-op action
 MAX_OVERLAPPING_ACTIONS = 4
@@ -45,61 +54,34 @@ ACTION_MEANINGS_TO_IDX = {
 
 
 def _no_op(game_object: Union[Unit, CityTile]) -> Optional[str]:
-    return None
+    return np.array([0])
 
-
-def _pillage(worker: Unit) -> str:
-    return worker.pillage()
-
-
-def _build_city(worker: Unit) -> str:
-    return worker.build_city()
-
-
-def _build_worker(city_tile: CityTile) -> str:
-    return city_tile.build_worker()
-
-
-def _build_cart(city_tile: CityTile) -> str:
+def _build_light(city_tile: CityTile) -> str:
     return city_tile.build_cart()
 
+def _build_heavy(city_tile: CityTile) -> str:
+    return city_tile.build_worker()
 
-def _research(city_tile: CityTile) -> str:
+def _grow_lichen(worker: Unit) -> str:
+    return worker.build_city()
+
+def _move(city_tile: CityTile) -> str:
     return city_tile.research()
 
+def _transfer(action_meaning: str) -> Callable[[Unit], str]:
+    return None
 
-def _move_factory(action_meaning: str) -> Callable[[Unit], str]:
-    direction = action_meaning.split("_")[1]
-    if direction not in DIRECTIONS:
-        raise ValueError(f"Unrecognized direction '{direction}' in action_meaning '{action_meaning}'")
+def _pick_up():
+    return None
 
-    def _move_func(unit: Unit) -> str:
-        return unit.move(direction)
+def _dig():
+    return None
 
-    return _move_func
+def _self_destruct():
+    return None
 
-
-def _transfer_factory(action_meaning: str) -> Callable[..., str]:
-    resource, direction = action_meaning.split("_")[1:]
-    if resource not in RESOURCES:
-        raise ValueError(f"Unrecognized resource '{resource}' in action_meaning '{action_meaning}'")
-    if direction not in DIRECTIONS:
-        raise ValueError(f"Unrecognized direction '{direction}' in action_meaning '{action_meaning}'")
-
-    def _transfer_func(unit: Unit, pos_to_unit_dict: Dict[Tuple, Optional[Unit]]) -> str:
-        dest_pos = unit.pos.translate(direction, 1)
-        dest_unit = pos_to_unit_dict.get((dest_pos.x, dest_pos.y), None)
-        # If the square is not on the map or there is not an allied unit in that square
-        if dest_unit is None:
-            return ""
-        # NB: Technically, this does limit the agent's action space, particularly in that they cannot transfer anything
-        # except the maximum amount. I don't want to deal with continuous action spaces, but perhaps the transfer
-        # action could be bucketed if partial transfers become important.
-        # The game engine automatically determines the actual maximum legal transfer
-        # https://github.com/Lux-AI-Challenge/Lux-Design-2021/blob/master/src/Game/index.ts#L704
-        return unit.transfer(dest_id=dest_unit.id, resourceType=resource, amount=MAX_CAPACITY)
-
-    return _transfer_func
+def _recharge():
+    return None
 
 
 ACTION_TO_FUNC = {

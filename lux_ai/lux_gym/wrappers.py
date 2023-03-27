@@ -21,8 +21,8 @@ class SharedObs(gym.Wrapper):
     def reset(self, **kwargs):
         return SharedObs._get_shared_observation(super(SharedObs, self).reset(**kwargs))
 
-    def step(self, action):
-        return SharedObs._get_shared_observation(super(SharedObs, self).step(action))
+    def step(self, actions):
+        return SharedObs._get_shared_observation(super(SharedObs, self).step(actions))
 
 
 class PadFixedShapeEnv(gym.Wrapper):
