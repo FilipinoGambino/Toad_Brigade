@@ -17,45 +17,45 @@ class Factory:
     # lichen_tiles: np.ndarray
     env_cfg: EnvConfig
 
-    def _build_heavy_metal_cost(self, game_state):
+    def _heavy_robot_metal_cost(self, game_state):
         unit_cfg = self.env_cfg.ROBOTS["HEAVY"]
         return unit_cfg.METAL_COST
 
-    def _build_heavy_power_cost(self, game_state):
+    def _heavy_robot_power_cost(self, game_state):
         unit_cfg = self.env_cfg.ROBOTS["HEAVY"]
         return unit_cfg.POWER_COST
 
     def can_build_heavy(self, game_state):
-        return self.power >= self._build_heavy_power_cost(game_state) and self.cargo.metal >= self._build_heavy_metal_cost(game_state)
+        return self.power >= self._heavy_robot_power_cost(game_state) and self.cargo.metal >= self._heavy_robot_metal_cost(game_state)
 
     def build_heavy(self):
         return 1
 
-    def _build_light_metal_cost(self, game_state):
+    def _light_robot_metal_cost(self, game_state):
         unit_cfg = self.env_cfg.ROBOTS["LIGHT"]
         return unit_cfg.METAL_COST
 
-    def _build_light_power_cost(self, game_state):
+    def _light_robot_power_cost(self, game_state):
         unit_cfg = self.env_cfg.ROBOTS["LIGHT"]
         return unit_cfg.POWER_COST
 
     def can_build_light(self, game_state):
-        return self.power >= self._build_light_power_cost(game_state) and self.cargo.metal >= self._build_light_metal_cost(game_state)
+        return self.power >= self._light_robot_power_cost(game_state) and self.cargo.metal >= self._light_robot_metal_cost(game_state)
 
     def build_light(self):
         return 0
 
-    def _water_cost(self, game_state):
+    def _lichen_water_cost(self, game_state):
         """
         Water required to perform water action
         """
         owned_lichen_tiles = (game_state.board.lichen_strains == self.strain_id).sum()
         return np.ceil(owned_lichen_tiles / self.env_cfg.LICHEN_WATERING_COST_FACTOR)
 
-    def can_water(self, game_state):
-        return self.cargo.water >= self._water_cost(game_state)
+    def can_water_lichen(self, game_state):
+        return self.cargo.water >= self._lichen_water_cost(game_state)
 
-    def water(self):
+    def water_lichen(self):
         return 2
 
     @property

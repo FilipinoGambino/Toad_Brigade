@@ -8,7 +8,7 @@ import numpy.typing as npt
 from .act_spaces import ACTION_MEANINGS
 from .lux_env import LuxEnv
 from .reward_spaces import BaseRewardSpace
-from ..utility_constants import MAX_BOARD_SIZE
+from ..utility_constants import MAP_SIZE
 
 
 class SharedObs(gym.Wrapper):
@@ -25,62 +25,62 @@ class SharedObs(gym.Wrapper):
         return SharedObs._get_shared_observation(super(SharedObs, self).step(actions))
 
 
-class PadFixedShapeEnv(gym.Wrapper):
-    def __init__(self, env: gym.Env, max_board_size: Tuple[int, int] = MAX_BOARD_SIZE):
-        super(PadFixedShapeEnv, self).__init__(env)
-        self.max_board_size = max_board_size
-        self.observation_space = self.unwrapped.obs_space.get_obs_spec(max_board_size)
-        self.input_mask = np.zeros((1,) + max_board_size, dtype=bool)
-        self.input_mask[:, :self.orig_board_dims[0], :self.orig_board_dims[1]] = True
-
-    def _pad(self, x: Union[Dict, np.ndarray]) -> Union[dict, np.ndarray]:
-        if isinstance(x, dict):
-            return {key: self._pad(val) for key, val in x.items()}
-        elif x.ndim == 4 and x.shape[2:4] == self.orig_board_dims:
-            return np.pad(x, pad_width=self.base_pad_width, constant_values=0.)
-        elif x.ndim == 5 and x.shape[2:4] == self.orig_board_dims:
-            return np.pad(x, pad_width=self.base_pad_width + ((0, 0),), constant_values=0.)
-        else:
-            return x
-
-    def observation(self, observation: Dict[str, Union[Dict, np.ndarray]]) -> Dict[str, np.ndarray]:
-        return {
-            key: self._pad(val) for key, val in observation.items()
-        }
-
-    def info(self, info: Dict[str, Union[Dict, np.ndarray]]) -> Dict[str, np.ndarray]:
-        info = {
-            key: self._pad(val) for key, val in info.items()
-        }
-        assert "input_mask" not in info.keys()
-        info["input_mask"] = self.input_mask
-        return info
-
-    def reset(self, **kwargs):
-        obs, reward, done, info = super(PadFixedShapeEnv, self).reset(**kwargs)
-        self.input_mask[:] = 0
-        self.input_mask[:, :self.orig_board_dims[0], :self.orig_board_dims[1]] = 1
-        return self.observation(obs), reward, done, self.info(info)
-
-    def step(self, action: Dict[str, np.ndarray]):
-        action = {
-            key: val[..., :self.orig_board_dims[0], :self.orig_board_dims[1]] for key, val in action.items()
-        }
-        obs, reward, done, info = super(PadFixedShapeEnv, self).step(action)
-        return self.observation(obs), reward, done, self.info(info)
-
-    @property
-    def orig_board_dims(self) -> Tuple[int, int]:
-        return self.unwrapped.board_dims
-
-    @property
-    def base_pad_width(self):
-        return (
-            (0, 0),
-            (0, 0),
-            (0, self.max_board_size[0] - self.orig_board_dims[0]),
-            (0, self.max_board_size[1] - self.orig_board_dims[1])
-        )
+# class PadFixedShapeEnv(gym.Wrapper):
+#     def __init__(self, env: gym.Env, max_board_size: Tuple[int, int] = MAX_BOARD_SIZE):
+#         super(PadFixedShapeEnv, self).__init__(env)
+#         self.max_board_size = max_board_size
+#         self.observation_space = self.unwrapped.obs_space.get_obs_spec(max_board_size)
+#         self.input_mask = np.zeros((1,) + max_board_size, dtype=bool)
+#         self.input_mask[:, :self.orig_board_dims[0], :self.orig_board_dims[1]] = True
+#
+#     def _pad(self, x: Union[Dict, np.ndarray]) -> Union[dict, np.ndarray]:
+#         if isinstance(x, dict):
+#             return {key: self._pad(val) for key, val in x.items()}
+#         elif x.ndim == 4 and x.shape[2:4] == self.orig_board_dims:
+#             return np.pad(x, pad_width=self.base_pad_width, constant_values=0.)
+#         elif x.ndim == 5 and x.shape[2:4] == self.orig_board_dims:
+#             return np.pad(x, pad_width=self.base_pad_width + ((0, 0),), constant_values=0.)
+#         else:
+#             return x
+#
+#     def observation(self, observation: Dict[str, Union[Dict, np.ndarray]]) -> Dict[str, np.ndarray]:
+#         return {
+#             key: self._pad(val) for key, val in observation.items()
+#         }
+#
+#     def info(self, info: Dict[str, Union[Dict, np.ndarray]]) -> Dict[str, np.ndarray]:
+#         info = {
+#             key: self._pad(val) for key, val in info.items()
+#         }
+#         assert "input_mask" not in info.keys()
+#         info["input_mask"] = self.input_mask
+#         return info
+#
+#     def reset(self, **kwargs):
+#         obs, reward, done, info = super(PadFixedShapeEnv, self).reset(**kwargs)
+#         self.input_mask[:] = 0
+#         self.input_mask[:, :self.orig_board_dims[0], :self.orig_board_dims[1]] = 1
+#         return self.observation(obs), reward, done, self.info(info)
+#
+#     def step(self, action: Dict[str, np.ndarray]):
+#         action = {
+#             key: val[..., :self.orig_board_dims[0], :self.orig_board_dims[1]] for key, val in action.items()
+#         }
+#         obs, reward, done, info = super(PadFixedShapeEnv, self).step(action)
+#         return self.observation(obs), reward, done, self.info(info)
+#
+#     @property
+#     def orig_board_dims(self) -> Tuple[int, int]:
+#         return self.unwrapped.board_dims
+#
+#     @property
+#     def base_pad_width(self):
+#         return (
+#             (0, 0),
+#             (0, 0),
+#             (0, self.max_board_size[0] - self.orig_board_dims[0]),
+#             (0, self.max_board_size[1] - self.orig_board_dims[1])
+#         )
 
 
 class RewardSpaceWrapper(gym.Wrapper):
@@ -104,6 +104,7 @@ class RewardSpaceWrapper(gym.Wrapper):
         return (obs, *self._get_rewards_and_done(), info)
 
 
+# TODO Add logging info
 class LoggingEnv(gym.Wrapper):
     def __init__(self, env: gym.Env, reward_space: BaseRewardSpace):
         super(LoggingEnv, self).__init__(env)
@@ -222,9 +223,9 @@ class VecEnv(gym.Env):
         self.last_outs = [env.step(a) for env, a in zip(self.envs, actions)]
         return VecEnv._vectorize_env_outs(self.last_outs)
 
-    def render(self, idx: int, mode: str = "human", **kwargs):
+    def render(self, mode: str = "human", **kwargs):
         # noinspection PyArgumentList
-        return self.envs[idx].render(mode, **kwargs)
+        return self.envs[kwargs["idx"]].render(mode, **kwargs)
 
     def close(self):
         return [env.close() for env in self.envs]

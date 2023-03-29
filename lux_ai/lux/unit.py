@@ -8,13 +8,20 @@ from .config import EnvConfig
 
 # a[1] = direction (0 = center, 1 = up, 2 = right, 3 = down, 4 = left)
 move_deltas = np.array([[0, 0], [0, -1], [1, 0], [0, 1], [-1, 0]])
-resources = {
-    'ice': 0,
-    'ore': 1,
-    'water': 2,
-    'metal': 3,
-    'power': 4,
-}
+directions = dict(
+    center = 0,
+    up = 1,
+    right = 2,
+    down = 3,
+    left = 4,
+)
+resources = dict(
+    ice = 0,
+    ore = 1,
+    water = 2,
+    metal = 3,
+    power = 4,
+)
 
 
 @dataclass
@@ -28,7 +35,7 @@ class Unit:
     env_cfg: EnvConfig
     unit_cfg: dict
     action_queue: List
-    only_transfer_power: bool
+    only_power: bool
 
     @property
     def agent_id(self):
@@ -55,22 +62,20 @@ class Unit:
         return math.floor(self.unit_cfg.MOVE_COST + self.unit_cfg.RUBBLE_MOVEMENT_COST * rubble_at_target)
 
     def move(self, direction, repeat=0, n=1):
-        if isinstance(direction, int):
-            direction = direction
-        else:
-            pass
+        assert direction in directions.values(), f"{direction} not in {directions}"
         return np.array([0, direction, 0, 0, repeat, n])
 
     def transfer(self, transfer_direction, transfer_resource, transfer_amount, repeat=0, n=1):
-        if self.only_transfer_power:
+        if self.only_power:
+            # TODO Maybe this should be in action space somewhere
             transfer_resource = resources['power']
-            return np.array([1, transfer_direction, transfer_resource, transfer_amount, repeat, n])
-        else:
-            assert transfer_resource in resources.values()
-            return np.array([1, transfer_direction, transfer_resource, transfer_amount, repeat, n])
+        assert transfer_resource in resources.values(), f"{transfer_resource} not in {resources}"
+        return np.array([1, transfer_direction, transfer_resource, transfer_amount, repeat, n])
 
     def pickup(self, pickup_resource, pickup_amount, repeat=0, n=1):
-        assert pickup_resource in resources.values()
+        if self.only_power:
+            pickup_resource = resources['power']
+        assert pickup_resource in resources.values(), f"{pickup_resource} not in {resources}"
         return np.array([2, 0, pickup_resource, pickup_amount, repeat, n])
 
     def dig_cost(self, game_state):

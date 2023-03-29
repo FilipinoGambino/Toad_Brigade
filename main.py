@@ -1,11 +1,41 @@
-from contextlib import redirect_stdout
-import io
-# Silence "Loading environment football failed: No module named 'gfootball'" message
-with redirect_stdout(io.StringIO()):
-    import kaggle_environments
+import json
 from typing import Dict
-from lux_ai.rl_agent.rl_agent import agent
-# from lux_ai.handcrafted_agents.needs_name_v0 import agent
+import sys
+from argparse import Namespace
+
+from lux_ai.rl_agent.rl_agent import Agent
+from .lux_ai.lux.config import EnvConfig
+from .lux_ai.lux.game_state import GameState, process_obs, to_json, from_json, process_action, obs_to_game_state
+
+### DO NOT REMOVE THE FOLLOWING CODE ###
+agent_dict = dict()  # store potentially multiple dictionaries as kaggle imports code directly
+agent_prev_obs = dict()
+
+
+def agent_fn(observation, configurations):
+    """
+    agent definition for kaggle submission.
+    """
+    global agent_dict
+    step = observation.step
+
+    player = observation.player
+    remainingOverageTime = observation.remainingOverageTime
+    if step == 0:
+        env_cfg = EnvConfig.from_dict(configurations["env_cfg"])
+        agent_dict[player] = Agent(player, env_cfg)
+        agent_prev_obs[player] = dict()
+        agent = agent_dict[player]
+    agent = agent_dict[player]
+    obs = process_obs(player, agent_prev_obs[player], step, json.loads(observation.obs))
+    agent_prev_obs[player] = obs
+    agent.step = step
+    if obs["real_env_steps"] < 0:
+        actions = agent.early_setup(step, obs, remainingOverageTime)
+    else:
+        actions = agent.act(step, obs, remainingOverageTime)
+
+    return process_action(actions)
 
 
 if __name__ == "__main__":
@@ -18,33 +48,22 @@ if __name__ == "__main__":
             return input()
         except EOFError as eof:
             raise SystemExit(eof)
-    step = 0
 
-    class Observation(Dict[str, any]):
-        def __init__(self, player=0):
-            self.player = player
-            # self.updates = []
-            # self.step = 0
-    observation = Observation()
-    observation["updates"] = []
-    observation["step"] = 0
-    observation["remainingOverageTime"] = 60.
+
+    step = 0
     player_id = 0
+    configurations = None
+    i = 0
     while True:
         inputs = read_input()
-        observation["updates"].append(inputs)
-        
-        if step == 0:
-            player_id = int(observation["updates"][0])
-            observation.player = player_id
-            """
-            # fixes bug where updates array is shared, but the first update is agent dependent actually
-            observation["updates"][0] = f"{observation.player}"
-            """
-        if inputs == "D_DONE":
-            actions = agent(observation, None)
-            observation["updates"] = []
-            step += 1
-            observation["step"] = step
-            print(",".join(actions))
-            print("D_FINISH")
+        obs = json.loads(inputs)
+
+        observation = Namespace(
+            **dict(step=obs["step"], obs=json.dumps(obs["obs"]), remainingOverageTime=obs["remainingOverageTime"],
+                   player=obs["player"], info=obs["info"]))
+        if i == 0:
+            configurations = obs["info"]["env_cfg"]
+        i += 1
+        actions = agent_fn(observation, dict(env_cfg=configurations))
+        # send actions to engine
+        print(json.dumps(actions))

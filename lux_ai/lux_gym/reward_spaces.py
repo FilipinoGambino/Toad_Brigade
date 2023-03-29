@@ -114,11 +114,7 @@ class GameResultReward(FullGameRewardSpace):
 
     @staticmethod
     def compute_player_reward(player: Player):
-        ct_count = player.city_tile_count
-        unit_count = len(player.units)
-        # max board size is 32 x 32 => 1024 max city tiles and units,
-        # so this should keep it strictly so we break by city tiles then unit count
-        return ct_count * 10000 + unit_count
+        return player.lichen_count
 
 
 class CityTileReward(FullGameRewardSpace):

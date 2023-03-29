@@ -7,7 +7,7 @@ import requests
 from kaggle_environments import structify
 from tqdm import tqdm
 
-from lux_ai.rl_agent import rl_agent
+from lux_ai.rl_agent import rl_agent_s1
 
 REPLAYS = [
     # replay_id, player_id

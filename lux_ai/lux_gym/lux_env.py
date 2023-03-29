@@ -87,7 +87,7 @@ class LuxEnv(gym.Env):
         if configuration is not None:
             self.configuration = configuration
         else:
-            self.configuration = make("lux_ai_2021").configuration
+            self.configuration = make("lux_ai_s2").configuration
             # 2: warnings, 1: errors, 0: none
             self.configuration["loglevel"] = 0
         if seed is not None:

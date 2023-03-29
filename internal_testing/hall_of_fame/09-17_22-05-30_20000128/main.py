@@ -4,7 +4,7 @@ import io
 with redirect_stdout(io.StringIO()):
     import kaggle_environments
 from typing import Dict
-from lux_ai.rl_agent.rl_agent import agent
+from lux_ai.rl_agent.rl_agent_s1 import agent
 # from lux_ai.handcrafted_agents.needs_name_v0 import agent
 
 
