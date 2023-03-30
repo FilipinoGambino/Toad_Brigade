@@ -1,21 +1,15 @@
 import getpass
 
-from .lux.constants import Constants
-from .lux.game_constants import GAME_CONSTANTS
+# from .lux.constants import Constants
+# from .lux.game_constants import GAME_CONSTANTS
 
 USER = getpass.getuser()
 LOCAL_EVAL = USER in ['isaiah']
 
 # Shorthand constants
-DAY_LEN = GAME_CONSTANTS["PARAMETERS"]["DAY_LENGTH"]
-CYCLE_LENGTH = GAME_CONSTANTS["PARAMETERS"]["NIGHT_LENGTH"]
-COLLECTION_RATES = GAME_CONSTANTS["PARAMETERS"]["WORKER_COLLECTION_RATE"]
 
 # Derived constants
+DAY_LEN = 30
+CYCLE_LENGTH = 50
 MAX_FACTORIES = 2
-MAX_RESOURCE = {
-    Constants.RESOURCE_TYPES.WOOD: GAME_CONSTANTS["PARAMETERS"]["MAX_WOOD_AMOUNT"],
-    Constants.RESOURCE_TYPES.COAL: 425.,
-    Constants.RESOURCE_TYPES.URANIUM: 350.
-}
 MAP_SIZE = (48, 48)

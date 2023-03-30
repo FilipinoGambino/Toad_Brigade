@@ -20,8 +20,8 @@ class FactionTypes(Enum):
     TheBuilders = FactionInfo(color="blue", faction_id=3)
     FirstMars = FactionInfo(color="red", faction_id=4)
 
-class Team:
-    def __init__(self, team_id: int, agent: str, faction: FactionTypes = None, water=0, metal=0, factories_to_place=0, factory_strains=[], place_first=False, bid=0) -> None:
+class Player:
+    def __init__(self, team_id: int, agent: str, faction: FactionTypes = None, water=0, metal=0, factories_to_place=1, factory_strains=[], place_first=False, bid=0) -> None:
         self.faction = faction
         self.team_id = team_id
         # the key used to differentiate ownership of things in state
@@ -34,6 +34,11 @@ class Team:
         # whether this team gets to place factories down first or not. The bid winner has this set to True.
         # If tied, player_0's team has this True
         self.place_first = place_first
+
+    @property
+    def lichen_count(self):
+        return 0
+
     def state_dict(self):
         return dict(
             team_id=self.team_id,

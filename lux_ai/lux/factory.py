@@ -60,4 +60,5 @@ class Factory:
 
     @property
     def pos_slice(self):
-        return slice(self.pos[0] - 1, self.pos[0] + 2), slice(self.pos[1] - 1, self.pos[1] + 2)
+        x,y = self.pos
+        return slice(x - 1, x + 2), slice(y - 1, y + 2)

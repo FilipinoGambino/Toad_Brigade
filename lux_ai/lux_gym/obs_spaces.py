@@ -9,7 +9,6 @@ from typing import Dict, List, Tuple, Any
 
 from ..utility_constants import MAP_SIZE, MAX_FACTORIES, CYCLE_LENGTH
 
-MAX_FUEL = 30 * 10 * 9
 # Player count
 P = 2
 
@@ -27,14 +26,10 @@ class BaseObsSpace(ABC):
 
 
 class FixedShapeObs(BaseObsSpace, ABC):
-    pass
-
-
-class FixedShapeContinuousObs(FixedShapeObs):
     def get_obs_spec(self) -> gym.spaces.Dict:
         x,y = MAP_SIZE
         return gym.spaces.Dict({
-            # none, robot
+            # robot presence by weight class
             "light_robot": gym.spaces.MultiBinary((1, P, x, y)),
             "heavy_robot": gym.spaces.MultiBinary((1, P, x, y)),
 
@@ -78,11 +73,14 @@ class FixedShapeContinuousObs(FixedShapeObs):
             "lichen_spreading": gym.spaces.MultiBinary((1, 1, x, y)),
             # lichen strain ID
             "lichen_strain": gym.spaces.MultiDiscrete(np.full((1, 1, x, y), MAX_FACTORIES * 2)),
-            # Resources
+            # lichen count per tile normalized from 0-100
             "lichen": gym.spaces.Box(0., 1., shape=(1, 1, x, y)),
+            # rubble count per tile normalized from 0-100
             "rubble": gym.spaces.Box(0., 1., shape=(1, 1, x, y)),
-            "ore": gym.spaces.Box(0., 1., shape=(1, 1, x, y)),
-            "ice": gym.spaces.Box(0., 1., shape=(1, 1, x, y)),
+            # ore on tile
+            "ore": gym.spaces.MultiBinary((1, 1, x, y)),
+            # ice on tile
+            "ice": gym.spaces.MultiBinary((1, 1, x, y)),
 
             ## GLOBALS
             # turn number // 100
@@ -103,7 +101,7 @@ class _FixedShapeContinuousObsWrapper(gym.Wrapper):
     def __init__(self, env: gym.Env):
         super(_FixedShapeContinuousObsWrapper, self).__init__(env)
         self._empty_obs = {}
-        for key, spec in FixedShapeContinuousObs().get_obs_spec().spaces.items():
+        for key, spec in FixedShapeObs().get_obs_spec().spaces.items():
             if isinstance(spec, gym.spaces.MultiBinary) or isinstance(spec, gym.spaces.MultiDiscrete):
                 self._empty_obs[key] = np.zeros(spec.shape, dtype=np.int64)
             elif isinstance(spec, gym.spaces.Box):
@@ -170,13 +168,15 @@ class _FixedShapeContinuousObsWrapper(gym.Wrapper):
                 obs['factory_strain'][square] = factory['strain_id']
 
             for x,y in itertools.product(range(env_cfg.map_size), repeat=2):
-                obs['rubble'][0, 0, x, y] = board_maps["rubble"][x, y] / 5000
-                obs['ore'][0, 0, x, y] = board_maps["ore"][x, y] / 5000
-                obs['ice'][0, 0, x, y] = board_maps["ice"][x, y] / 5000
-                obs['lichen'][0, 0, x, y] = board_maps["rubble"][x, y] / 100
-                obs['lichen_spreading'][0, 0, x, y] = env_cfg.MIN_LICHEN_TO_SPREAD <= board_maps['lichen'][x, y] < env_cfg.MAX_LICHEN_PER_TILE
+                obs['rubble'][0, 0, x, y] = board_maps["rubble"][x, y] / env_cfg.MAX_RUBBLE
+                obs['lichen'][0, 0, x, y] = board_maps["lichen"][x, y] / 100
+                obs['lichen_spreading'][0, 0, x, y] = env_cfg.MIN_LICHEN_TO_SPREAD \
+                                                      <= board_maps['lichen'][x, y] \
+                                                      < env_cfg.MAX_LICHEN_PER_TILE
                 obs['lichen_strain'][0, 0, x, y] = board_maps["lichen_strains"][x, y]
 
+            obs['ore'] = board_maps['ore']
+            obs['ice'] = board_maps['ice']
             obs['game_phase'][0, 0] = shared_obs['real_env_steps'] // 100
             obs['cycle_step'][0, 0] = shared_obs['real_env_steps'] % env_cfg.CYCLE_LENGTH
             obs['turn'][0, 0] = shared_obs['real_env_steps'] / env_cfg.max_episode_length

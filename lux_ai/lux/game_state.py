@@ -3,8 +3,8 @@ from typing import Dict
 import numpy as np
 from .cargo import UnitCargo
 from .config import EnvConfig
-from .team import Team, FactionTypes
-from .unit import Unit
+from .player import Player, FactionTypes
+from .robot import Robot
 from .factory import Factory
 
 def obs_to_game_state(step, env_cfg: EnvConfig, obs):
@@ -13,34 +13,37 @@ def obs_to_game_state(step, env_cfg: EnvConfig, obs):
         units[agent] = dict()
         for unit_id in obs["units"][agent]:
             unit_data = obs["units"][agent][unit_id]
-            cargo = UnitCargo(**unit_data["cargo"])
-            unit = Unit(
+            unit = Robot(
                 **unit_data,
                 unit_cfg=env_cfg.ROBOTS[unit_data["unit_type"]],
                 env_cfg=env_cfg
             )
-            unit.cargo = cargo
+            unit.cargo = UnitCargo(**unit_data["cargo"])
             units[agent][unit_id] = unit
 
-    factory_occupancy_map = np.ones_like(obs["board"]["rubble"], dtype=int) * -1
+    factory_occupancy_map = np.full_like(obs["board"]["rubble"], fill_value=-1, dtype=int)
     factories = dict()
     for agent in obs["factories"]:
         factories[agent] = dict()
         for unit_id in obs["factories"][agent]:
             f_data = obs["factories"][agent][unit_id]
-            cargo = UnitCargo(**f_data["cargo"])
             factory = Factory(
                 **f_data,
                 env_cfg=env_cfg
             )
-            factory.cargo = cargo
+            factory.cargo = UnitCargo(**f_data["cargo"])
             factories[agent][unit_id] = factory
             factory_occupancy_map[factory.pos_slice] = factory.strain_id
-    teams = dict()
+    players = dict()
+    # FIXME It "teams" correct?
     for agent in obs["teams"]:
         team_data = obs["teams"][agent]
-        faction = FactionTypes[team_data["faction"]]
-        teams[agent] = Team(**team_data, agent=agent)
+        # team_data['factories_count'] =
+        # faction = FactionTypes[team_data["faction"]]
+        players[agent] = Player(**team_data, agent=agent)
+
+    lichen_spreading = (env_cfg.MIN_LICHEN_TO_SPREAD <= obs["board"]["lichen"]) & \
+                       (obs["board"]["lichen"] < env_cfg.MAX_LICHEN_PER_TILE)
 
     game_state = GameState(
         env_cfg=env_cfg,
@@ -51,14 +54,15 @@ def obs_to_game_state(step, env_cfg: EnvConfig, obs):
             ore=obs["board"]["ore"],
             lichen=obs["board"]["lichen"],
             lichen_strains=obs["board"]["lichen_strains"],
-            lichen_spreading=env_cfg.MIN_LICHEN_TO_SPREAD <= obs["board"]["lichen"] < env_cfg.MAX_LICHEN_PER_TILE,
+            lichen_spreading=lichen_spreading,
             factory_occupancy_map=factory_occupancy_map,
             factories_per_team=obs["board"]["factories_per_team"],
+            lichen_per_team=0,
             valid_spawns_mask=obs["board"]["valid_spawns_mask"]
         ),
         units=units,
         factories=factories,
-        teams=teams
+        players=players
     )
 
     return game_state
@@ -74,6 +78,7 @@ class Board:
     lichen_spreading: np.ndarray
     factory_occupancy_map: np.ndarray
     factories_per_team: int
+    lichen_per_team: int
     valid_spawns_mask: np.ndarray
 
 
@@ -85,9 +90,9 @@ class GameState:
     env_steps: int
     env_cfg: dict
     board: Board
-    units: Dict[str, Dict[str, Unit]] = field(default_factory=dict)
+    units: Dict[str, Dict[str, Robot]] = field(default_factory=dict)
     factories: Dict[str, Dict[str, Factory]] = field(default_factory=dict)
-    teams: Dict[str, Team] = field(default_factory=dict)
+    players: Dict[str, Player] = field(default_factory=dict)
 
     @property
     def real_env_steps(self):
@@ -109,3 +114,8 @@ class GameState:
 
     def game_phase(self):
         return self.real_env_steps // 100
+
+    # @property
+    # def lichen_count(self):
+    #     for player_id in self.players:
+

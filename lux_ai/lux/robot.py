@@ -25,7 +25,7 @@ resources = dict(
 
 
 @dataclass
-class Unit:
+class Robot:
     team_id: int
     unit_id: str
     unit_type: str  # "LIGHT" or "HEAVY"

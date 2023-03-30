@@ -10,7 +10,7 @@ from abc import ABC
 import luxai_s2.unit as luxai_unit
 from luxai_s2.unit import UnitType
 from luxai_s2.config import EnvConfig
-from actions import (
+from ..lux_gym.act_spaces import (
     FactoryBuildAction,
     FactoryWaterAction,
     MoveAction,
