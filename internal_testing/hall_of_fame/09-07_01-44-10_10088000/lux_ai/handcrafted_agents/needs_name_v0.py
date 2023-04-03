@@ -23,8 +23,8 @@ class Agent:
         self.game_state = self.game_state = Game()
         self.game_state._initialize(obs["updates"])
 
-        self.me = self.game_state.players[obs.player]
-        self.opp = self.game_state.players[(obs.player + 1) % 2]
+        self.me = self.game_state.players[obs.my_id]
+        self.opp = self.game_state.players[(obs.my_id + 1) % 2]
         self.w, self.h = self.game_state.map.width, self.game_state.map.height
 
         self.all_cities_mat = np.zeros((2, self.w, self.h), dtype=bool)
@@ -68,8 +68,8 @@ class Agent:
         self.game_state._update(obs["updates"])
 
         # Code starts here
-        self.me = self.game_state.players[obs.player]
-        self.opp = self.game_state.players[(obs.player + 1) % 2]
+        self.me = self.game_state.players[obs.my_id]
+        self.opp = self.game_state.players[(obs.my_id + 1) % 2]
 
         # Reset actions
         self.city_tile_actions = {}

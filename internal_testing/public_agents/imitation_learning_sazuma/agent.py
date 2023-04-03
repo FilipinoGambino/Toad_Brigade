@@ -124,7 +124,7 @@ def agent(observation, configuration):
     global game_state
     
     game_state = get_game_state(observation)    
-    player = game_state.players[observation.player]
+    player = game_state.players[observation.my_id]
     actions = []
     
     # City Actions

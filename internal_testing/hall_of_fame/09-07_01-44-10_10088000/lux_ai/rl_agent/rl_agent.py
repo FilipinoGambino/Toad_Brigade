@@ -39,7 +39,7 @@ class RLAgent:
             self.agent_flags = SimpleNamespace(**yaml.safe_load(f))
         if torch.cuda.is_available():
             if self.agent_flags.device == "player_id":
-                device_id = f"cuda:{min(obs.player, torch.cuda.device_count() - 1)}"
+                device_id = f"cuda:{min(obs.my_id, torch.cuda.device_count() - 1)}"
             else:
                 device_id = self.agent_flags.device
         else:
@@ -83,8 +83,8 @@ class RLAgent:
             self.data_augmentations.append(da)
 
         # Various utility properties
-        self.me = self.game_state.players[obs.player]
-        self.opp = self.game_state.players[(obs.player + 1) % 2]
+        self.me = self.game_state.players[obs.my_id]
+        self.opp = self.game_state.players[(obs.my_id + 1) % 2]
         self.my_city_tile_mat = np.zeros(MAX_BOARD_SIZE, dtype=bool)
         # NB: loc = pos[0] * n_cols + pos[1]
         self.loc_to_actionable_city_tiles = {}
@@ -129,10 +129,10 @@ class RLAgent:
             actions, _ = self.unwrapped_env.process_actions({
                 key: value.squeeze(0).numpy() for key, value in agent_output["actions"].items()
             })
-            actions = actions[obs.player]
+            actions = actions[obs.my_id]
         self.stopwatch.stop()
 
-        value = agent_output["baseline"].squeeze().numpy()[obs.player]
+        value = agent_output["baseline"].squeeze().numpy()[obs.my_id]
         value_msg = f"Turn: {self.game_state.turn} - Predicted value: {value:.2f}"
         timing_msg = f"{str(self.stopwatch)}"
         overage_time_msg = f"Remaining overage time: {obs['remainingOverageTime']:.2f}"
@@ -143,8 +143,8 @@ class RLAgent:
 
     def preprocess(self, obs, conf) -> NoReturn:
         self.unwrapped_env.manual_step(obs["updates"])
-        self.me = self.game_state.players[obs.player]
-        self.opp = self.game_state.players[(obs.player + 1) % 2]
+        self.me = self.game_state.players[obs.my_id]
+        self.opp = self.game_state.players[(obs.my_id + 1) % 2]
 
         self.my_city_tile_mat[:] = False
         self.loc_to_actionable_city_tiles: Dict[int, CityTile] = {}
@@ -223,11 +223,11 @@ class RLAgent:
             for key, val in agent_output["policy_logits"].items()
         }
         my_flat_log_probs = {
-            key: val[obs.player] for key, val in flat_log_probs.items()
+            key: val[obs.my_id] for key, val in flat_log_probs.items()
         }
         my_flat_actions = {
             key: torch.flatten(
-                val.squeeze(0).squeeze(0)[obs.player],
+                val.squeeze(0).squeeze(0)[obs.my_id],
                 start_dim=-3,
                 end_dim=-2
             )
@@ -331,7 +331,7 @@ class RLAgent:
         actions, _ = self.unwrapped_env.process_actions({
             key: value.numpy() for key, value in actions_tensors.items()
         })
-        actions = actions[obs.player]
+        actions = actions[obs.my_id]
         return actions
 
     @property

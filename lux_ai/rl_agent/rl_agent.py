@@ -34,10 +34,11 @@ def my_turn_to_place_factory(place_first: bool, step: int):
 
 class Agent:
     def __init__(self, player: str, env_cfg: EnvConfig) -> None:
-        self.player = player
-        self.opp_player = "player_1" if self.player == "player_0" else "player_0"
+        self.my_id = player
+        self.opp_player = "player_1" if self.my_id == "player_0" else "player_0"
         np.random.seed(0)
         self.env_cfg: EnvConfig = env_cfg
+        self.factories_to_place = self.env_cfg.MAX_FACTORIES // 2
 
         # directory = osp.dirname(__file__)
         # self.policy = PPO.load(osp.join(directory, MODEL_WEIGHTS_RELATIVE_PATH))
@@ -50,7 +51,7 @@ class Agent:
 
     def factory_placement_policy(self, step: int, obs, remainingOverageTime: int = 60):
         # the policy here is the same one used in the RL tutorial: https://www.kaggle.com/code/stonet2000/rl-with-lux-2-rl-problem-solving
-        if obs["teams"][self.player]["metal"] == 0:
+        if obs["teams"][self.my_id]["metal"] == 0:
             return dict()
         potential_spawns = list(zip(*np.where(obs["board"]["valid_spawns_mask"] == 1)))
         potential_spawns_set = set(potential_spawns)
@@ -82,7 +83,7 @@ class Agent:
         if not done_search:
             pos = spawn_loc
 
-        metal = obs["teams"][self.player]["metal"]
+        metal = obs["teams"][self.my_id]["metal"]
         return dict(spawn=pos, metal=metal, water=metal)
 
     def early_setup(self, step: int, game_state, remainingOverageTime: int = 60):
@@ -95,13 +96,14 @@ class Agent:
             # factory placement period
 
             # how much water and metal you have in your starting pool to give to new factories
-            water_left = game_state.players[self.player].water
-            metal_left = game_state.players[self.player].metal
+            water_pool = self.env_cfg.INIT_WATER_METAL_PER_FACTORY
+            metal_pool = self.env_cfg.INIT_WATER_METAL_PER_FACTORY
+            power_pool = self.env_cfg.INIT_POWER_PER_FACTORY
 
             # how many factories you have left to place
-            factories_to_place = game_state.players[self.player].factories_to_place
+            factories_to_place = self.factories_to_place
             # whether it is your turn to place a factory
-            my_turn_to_place = my_turn_to_place_factory(game_state.players[self.player].place_first, step)
+            my_turn_to_place = my_turn_to_place_factory(game_state.players[self.my_id].place_first, step)
             if factories_to_place > 0 and my_turn_to_place:
                 # we will spawn our factory in a random location with 150 metal and water if it is our turn to place
                 potential_spawns = np.array(list(zip(*np.where(game_state.board.valid_spawns_mask == 1))))
@@ -112,15 +114,15 @@ class Agent:
     def act(self, step: int, obs, remainingOverageTime: int = 60):
         # first convert observations using the same observation wrapper you used for training
         # note that SimpleUnitObservationWrapper takes input as the full observation for both players and returns an obs for players
-        raw_obs = dict(player_0=obs, player_1=obs)
+        # raw_obs = dict(player_0=obs, player_1=obs)
         # obs = SimpleUnitObservationWrapper.convert_obs(raw_obs, env_cfg=self.env_cfg)
-
+        print(obs)
         obs = torch.from_numpy(obs).float()
         with torch.no_grad():
             # to improve performance, we have a rule based action mask generator for the controller used
             # which will force the agent to generate actions that are valid only.
             action_mask = (
-                torch.from_numpy(self.controller.action_masks(self.player, raw_obs))
+                torch.from_numpy(self.controller.action_masks(self.my_id, raw_obs))
                 .unsqueeze(0)
                 .bool()
             )
@@ -136,7 +138,7 @@ class Agent:
 
         # use our controller which we trained with in train.py to generate a Lux S2 compatible action
         lux_action = self.controller.action_to_lux_action(
-            self.player,
+            self.my_id,
             raw_obs,
             actions[0]
         )

@@ -1,9 +1,12 @@
-# import copy
-# import gym
-# import numpy as np
-# import torch
-# from typing import Dict, List, NoReturn, Optional, Tuple, Union
-# import numpy.typing as npt
+import copy
+import gym
+from gym import spaces
+import numpy as np
+import torch
+from typing import Dict, List, NoReturn, Optional, Tuple, Union, Any
+import numpy.typing as npt
+import itertools
+
 #
 # # from .act_spaces import ACTION_MEANINGS
 # from .lux_env import LuxEnv
@@ -235,3 +238,148 @@
 #
 #     def step(self, action):
 #         return DictEnv._dict_env_out(super(DictEnv, self).step(action))
+
+class ObservationWrapper(gym.ObservationWrapper):
+    """
+    A simple state based observation to work with in pair with the SimpleUnitDiscreteController
+    It contains info only on the first robot, the first factory you own, and some useful features. If there are no owned robots the observation is just zero.
+    No information about the opponent is included. This will generate observations for all teams.
+    Included features:
+    - First robot's stats
+    - distance vector to closest ice tile
+    - distance vector to first factory
+    """
+
+    def __init__(self, env: gym.Env) -> None:
+        super().__init__(env)
+        p = 2  # number of players
+        env_cfg = env.env_cfg
+        x = y = env_cfg.map_size
+        self.observation_space = spaces.Dict({
+            # none, robot
+            "light_robot": spaces.MultiBinary((1, p, x, y)),
+            "heavy_robot": spaces.MultiBinary((1, p, x, y)),
+
+            # LIGHT ROBOTS
+            # Number of units in the square (only relevant on city tiles)
+            "light_count": spaces.Box(0., float("inf"), shape=(1, p, x, y)),
+            # light robot power normalized from 0-150
+            "light_power": spaces.Box(0., 1., shape=(1, p, x, y)),
+            # light robot cargo normalized from 0-100
+            "light_ice": spaces.Box(0., 1., shape=(1, p, x, y)),
+            "light_ore": spaces.Box(0., 1., shape=(1, p, x, y)),
+            "light_water": spaces.Box(0., 1., shape=(1, p, x, y)),
+            "light_metal": spaces.Box(0., 1., shape=(1, p, x, y)),
+            # normalized to light robot capacity
+            "light_full": spaces.MultiBinary((1, p, x, y)),
+
+            # HEAVY ROBOTS
+            # Number of units in the square (only relevant on city tiles)
+            "heavy_count": spaces.Box(0., float("inf"), shape=(1, p, x, y)),
+            # heavy robot power normalized from 0-3000
+            "heavy_power": spaces.Box(0., 1., shape=(1, p, x, y)),
+            # heavy robot cargo normalized from 0-1000
+            "heavy_ice": spaces.Box(0., 1., shape=(1, p, x, y)),
+            "heavy_ore": spaces.Box(0., 1., shape=(1, p, x, y)),
+            "heavy_water": spaces.Box(0., 1., shape=(1, p, x, y)),
+            "heavy_metal": spaces.Box(0., 1., shape=(1, p, x, y)),
+            # robot cargo full
+            "heavy_full": spaces.MultiBinary((1, p, x, y)),
+
+            # FACTORIES
+            "factory": spaces.MultiBinary((1, p, x, y)),
+            "factory_power": spaces.Box(0., 1., shape=(1, p, x, y)),
+            "factory_ice": spaces.Box(0., 1., shape=(1, p, x, y)),
+            "factory_ore": spaces.Box(0., 1., shape=(1, p, x, y)),
+            "factory_water": spaces.Box(0., 1., shape=(1, p, x, y)),
+            "factory_metal": spaces.Box(0., 1., shape=(1, p, x, y)),
+            "factory_strain": spaces.MultiDiscrete(np.full((1, p, x, y), env_cfg.MAX_FACTORIES)),
+
+            # TODO What was this for again?
+            # "repeats_remaining": spaces.MultiDiscrete(np.full((1,1), 50)),
+
+            # MAPS
+            # lichen count greater than spreading minimum and less than max
+            "lichen_spreading": spaces.MultiBinary((1, 1, x, y)),
+            # lichen strain ID
+            "lichen_strain": spaces.MultiDiscrete(np.full((1, 1, x, y), env_cfg.MAX_FACTORIES)),
+            # Resources
+            "lichen": spaces.Box(0., 1., shape=(1, 1, x, y)),
+            "rubble": spaces.Box(0., 1., shape=(1, 1, x, y)),
+            "ore": spaces.Box(0., 1., shape=(1, 1, x, y)),
+            "ice": spaces.Box(0., 1., shape=(1, 1, x, y)),
+
+            # GLOBALS
+            # turn number // 100
+            "game_phase": spaces.MultiDiscrete(np.full((1, 1), 10)),
+            # turn number % 50
+            "cycle_step": spaces.MultiDiscrete(np.full((1, 1), env_cfg.CYCLE_LENGTH)),
+            # turn number, normalized from 0-1000
+            "turn": spaces.Box(0., 1., shape=(1, 1)),
+            # true during the day
+            "is_day": spaces.MultiDiscrete(np.full((1, 1), 2)),
+        })
+        self._empty_obs = {}
+
+    def observation(self, observation):
+        for key, spec in self.observation_space.spaces.items():
+            if isinstance(spec, gym.spaces.MultiBinary) or isinstance(spec, gym.spaces.MultiDiscrete):
+                self._empty_obs[key] = np.zeros(spec.shape, dtype=np.int64)
+            elif isinstance(spec, gym.spaces.Box):
+                self._empty_obs[key] = np.zeros(spec.shape, dtype=np.float32) + spec.low
+            else:
+                raise NotImplementedError(f"{type(spec)} is not an accepted observation space.")
+        return ObservationWrapper.convert_obs(observation, self.env.state.env_cfg, self._empty_obs)
+
+    # we make this method static so the submission/evaluation code can use this as well
+    @staticmethod
+    def convert_obs(observation: Dict[str, Any], env_cfg: Any, empty_obs: Dict[str, Any]) -> Dict[str, npt.NDArray]:
+        obs = empty_obs
+        shared_obs = observation['player_0']
+        board_maps = shared_obs["board"]
+
+        for p_idx, p_id in enumerate(observation.keys()):
+            for u_id,unit in shared_obs['units'][p_id].items():
+                cargo_space = env_cfg.ROBOTS[unit['unit_type']].CARGO_SPACE
+                battery_cap = env_cfg.ROBOTS[unit['unit_type']].BATTERY_CAPACITY
+                weight_class = unit['unit_type'].lower()
+                x, y = unit['pos']
+
+                obs[f'{weight_class}_robot'][0, p_idx, x, y] = 1
+                obs[f'{weight_class}_count'][0, p_idx, x, y] += 1
+                obs[f'{weight_class}_power'][0, p_idx, x, y] = unit['power'] / battery_cap
+                obs[f'{weight_class}_ice'][0, p_idx, x, y] = unit['cargo']['ice'] / cargo_space
+                obs[f'{weight_class}_ore'][0, p_idx, x, y] = unit['cargo']['ore'] / cargo_space
+                obs[f'{weight_class}_water'][0, p_idx, x, y] = unit['cargo']['water'] / cargo_space
+                obs[f'{weight_class}_metal'][0, p_idx, x, y] = unit['cargo']['metal'] / cargo_space
+                obs[f'{weight_class}_cargo_full'][0, p_idx, x, y] = sum(unit['cargo'].values()) == cargo_space
+
+            factories = shared_obs['factories'][p_id]
+            for f_id,factory in factories.items():
+                # Lichen also gives power, but I'm hoping robots are picking up power to keep the available power lower
+                # Box space will keep it limited to 1.0
+                power_cap = env_cfg.INIT_POWER_PER_FACTORY + env_cfg.max_episode_length * env_cfg.FACTORY_CHARGE
+                x, y = factory['pos']
+
+                obs['factory'][0, p_idx, x-1 : x+2, y-1 : y+2] = 1
+                obs['factory_power'][0, p_idx, x-1 : x+2, y-1 : y+2] = factory['power'] / power_cap
+                obs['factory_ice'][0, p_idx, x-1 : x+2, y-1 : y+2] = factory['cargo']['ice']
+                obs['factory_ore'][0, p_idx, x-1 : x+2, y-1 : y+2] = factory['cargo']['ore']
+                obs['factory_water'][0, p_idx, x-1 : x+2, y-1 : y+2] = factory['cargo']['water']
+                obs['factory_metal'][0, p_idx, x-1 : x+2, y-1 : y+2] = factory['cargo']['metal']
+                obs['factory_strain'][0, p_idx, x-1 : x+2, y-1 : y+2] = factory['strain_id']
+
+            for x,y in itertools.product(range(env_cfg.map_size), repeat=2):
+                obs['rubble'][0, 0, x, y] = board_maps["rubble"][x, y] / 5000
+                obs['ore'][0, 0, x, y] = board_maps["ore"][x, y] / 5000
+                obs['ice'][0, 0, x, y] = board_maps["ice"][x, y] / 5000
+                obs['lichen'][0, 0, x, y] = board_maps["rubble"][x, y] / 100
+                obs['lichen_spreading'][0, 0, x, y] = env_cfg.MIN_LICHEN_TO_SPREAD <= board_maps['lichen'][x, y] < env_cfg.MAX_LICHEN_PER_TILE
+                obs['lichen_strain'][0, 0, x, y] = board_maps["lichen_strains"][x, y]
+
+            obs['game_phase'][0, 0] = shared_obs['real_env_steps'] // 100
+            obs['cycle_step'][0, 0] = shared_obs['real_env_steps'] % env_cfg.CYCLE_LENGTH
+            obs['turn'][0, 0] = shared_obs['real_env_steps'] / env_cfg.max_episode_length
+            obs['is_day'][0, 0] = shared_obs['real_env_steps'] % env_cfg.CYCLE_LENGTH < env_cfg.DAY_LENGTH
+
+        return obs

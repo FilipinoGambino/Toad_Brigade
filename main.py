@@ -11,7 +11,6 @@ from lux_ai.lux_gym.controller import SimpleUnitDiscreteController
 
 from luxai_s2.env import LuxAI_S2
 
-
 ### DO NOT REMOVE THE FOLLOWING CODE ###
 agent_dict = dict()  # store potentially multiple dictionaries as kaggle imports code directly
 agent_prev_obs = dict()
@@ -25,7 +24,7 @@ def agent_fn(observation, configurations):
     global agent_dict
     step = observation.step
 
-    player = observation.player
+    player = observation.my_id
     print(observation)
     remainingOverageTime = observation.remainingOverageTime
     if step == 0:
@@ -69,42 +68,44 @@ def animate(imgs, _return=True, fps=10, filename="__temp__.mp4"):
 
 if __name__ == "__main__":
     import numpy as np
+    from lux_ai.lux_gym.wrappers import ObservationWrapper
 
-    env = LuxAI_S2(collect_stats=False, verbose=0)
-    obs = env.reset(seed=0)
+    env = LuxAI_S2(collect_stats=True, verbose=0)
+    obs = env.reset()
     env.env_cfg = env.state.env_cfg
-    env.env_cfg.verbose = 0
     env.env_steps = env.state.env_steps
+    env = ObservationWrapper(env)
 
-    step = 0
+    # obs = env.reset(seed=42)
+    print(obs['player_0']['board'].keys())
     steps = 1000
-    imgs = []
+    # imgs = []
     agents = dict(
         player_0=Agent("player_0", env.env_cfg),
         player_1=Agent("player_1", env.env_cfg),
     )
     # send actions to engine
     while env.state.real_env_steps < 0:
-        if step >= steps: break
+        print(f"step: {env.state.real_env_steps}")
+        if env.state.real_env_steps >= steps: break
         actions = {}
         for player in env.agents:
-            o = obs[player]
-            o = obs_to_game_state(step, env.env_cfg, o)
-            a = agents[player].early_setup(step, o)
-            actions[player] = a
-        step += 1
+            # o = obs[player]
+            # o = obs_to_game_state(step, env.env_cfg, obs)
+            player_actions = agents[player].early_setup(env.state.real_env_steps, obs)
+            actions[player] = player_actions
+
         obs, rewards, dones, infos = env.step(actions)
-        imgs += [env.render("rgb_array", width=640, height=640)]
+        # imgs += [env.render("rgb_array", width=640, height=640)]
     done = False
     while not done:
-        if step >= steps: break
+        if env.state.real_env_steps >= steps: break
         actions = {}
         for player in env.agents:
             o = obs[player]
-            a = agents[player].act(step, o)
-            actions[player] = a
-        step += 1
+            player_actions = agents[player].act(env.state.real_env_steps, o)
+            actions[player] = player_actions
         obs, rewards, dones, infos = env.step(actions)
-        imgs += [env.render("rgb_array", width=640, height=640)]
+        # imgs += [env.render("rgb_array", width=640, height=640)]
         done = dones["player_0"] and dones["player_1"]
-    animate(imgs)
+    # animate(imgs)
