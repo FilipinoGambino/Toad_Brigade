@@ -35,15 +35,18 @@ def obs_to_game_state(step, env_cfg: EnvConfig, obs):
             factories[agent][unit_id] = factory
             factory_occupancy_map[factory.pos_slice] = factory.strain_id
     players = dict()
-    # FIXME It "teams" correct?
+    # FIXME Is "teams" correct?
     for agent in obs["teams"]:
         team_data = obs["teams"][agent]
         # team_data['factories_count'] =
         # faction = FactionTypes[team_data["faction"]]
         players[agent] = Player(**team_data, agent=agent)
 
-    lichen_spreading = (env_cfg.MIN_LICHEN_TO_SPREAD <= obs["board"]["lichen"]) & \
-                       (obs["board"]["lichen"] < env_cfg.MAX_LICHEN_PER_TILE)
+    lichen_spreading = np.logical_and(
+        env_cfg.MIN_LICHEN_TO_SPREAD <= obs["board"]["lichen"],
+        obs["board"]["lichen"] < env_cfg.MAX_LICHEN_PER_TILE,
+        dtype=float,
+    )
 
     game_state = GameState(
         env_cfg=env_cfg,
@@ -62,7 +65,7 @@ def obs_to_game_state(step, env_cfg: EnvConfig, obs):
         ),
         units=units,
         factories=factories,
-        players=players
+        players=players,
     )
 
     return game_state
@@ -88,7 +91,7 @@ class GameState:
     A GameState object at step env_steps. Copied from luxai_s2/state/state.py
     """
     env_steps: int
-    env_cfg: dict
+    env_cfg: EnvConfig
     board: Board
     units: Dict[str, Dict[str, Robot]] = field(default_factory=dict)
     factories: Dict[str, Dict[str, Factory]] = field(default_factory=dict)

@@ -50,6 +50,7 @@ class Player:
             factory_strains=self.factory_strains,
             place_first=self.place_first,
         )
+
     def __str__(self) -> str:
         out = f"[Player {self.team_id}]"
         if TERM_COLORS:

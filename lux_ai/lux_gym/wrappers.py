@@ -7,6 +7,8 @@ from typing import Dict, List, NoReturn, Optional, Tuple, Union, Any
 import numpy.typing as npt
 import itertools
 
+from ..lux.config import EnvConfig
+
 #
 # # from .act_spaces import ACTION_MEANINGS
 # from .lux_env import LuxEnv
@@ -250,10 +252,10 @@ class ObservationWrapper(gym.ObservationWrapper):
     - distance vector to first factory
     """
 
-    def __init__(self, env: gym.Env) -> None:
-        super().__init__(env)
+    def __init__(self, env_cfg: EnvConfig, sample_obs) -> None:
+        super().__init__(sample_obs)
         p = 2  # number of players
-        env_cfg = env.env_cfg
+        env_cfg = env_cfg
         x = y = env_cfg.map_size
         self.observation_space = spaces.Dict({
             # none, robot

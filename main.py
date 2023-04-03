@@ -2,6 +2,7 @@ import json
 from typing import Dict
 import sys
 from argparse import Namespace
+import matplotlib.pyplot as plt
 
 from lux_ai.rl_agent.rl_agent import Agent
 from lux_ai.lux.config import EnvConfig
@@ -70,32 +71,35 @@ if __name__ == "__main__":
     import numpy as np
     from lux_ai.lux_gym.wrappers import ObservationWrapper
 
-    env = LuxAI_S2(collect_stats=True, verbose=0)
-    obs = env.reset()
+    env = LuxAI_S2(collect_stats=True, verbose=4)
     env.env_cfg = env.state.env_cfg
     env.env_steps = env.state.env_steps
-    env = ObservationWrapper(env)
 
-    # obs = env.reset(seed=42)
-    print(obs['player_0']['board'].keys())
+    obs = env.reset(seed=42)
+    img = env.render("rgb_array")
+    # plt.imshow(img)
+    # plt.show()
+    # print(obs['player_0']['board'].keys())
     steps = 1000
     # imgs = []
-    agents = dict(
-        player_0=Agent("player_0", env.env_cfg),
-        player_1=Agent("player_1", env.env_cfg),
-    )
+    env.agents = {player_id: Agent(player_id, env.env_cfg) for player_id in env.possible_agents}
+
     # send actions to engine
     while env.state.real_env_steps < 0:
         print(f"step: {env.state.real_env_steps}")
-        if env.state.real_env_steps >= steps: break
         actions = {}
         for player in env.agents:
-            # o = obs[player]
-            # o = obs_to_game_state(step, env.env_cfg, obs)
-            player_actions = agents[player].early_setup(env.state.real_env_steps, obs)
+            step = env.state.real_env_steps
+
+            game_state = obs_to_game_state(step, env.env_cfg, obs[player])
+            player_actions = env.agents[player].early_setup(step, game_state)
             actions[player] = player_actions
 
-        obs, rewards, dones, infos = env.step(actions)
+        print(f"actions: {actions}")
+        obs, _, _, _ = env.step(actions)
+    img = env.render("rgb_array")
+    plt.imshow(img)
+    plt.show()
         # imgs += [env.render("rgb_array", width=640, height=640)]
     done = False
     while not done:
@@ -103,7 +107,7 @@ if __name__ == "__main__":
         actions = {}
         for player in env.agents:
             o = obs[player]
-            player_actions = agents[player].act(env.state.real_env_steps, o)
+            player_actions = env.agents[player].act(env.state.real_env_steps, o)
             actions[player] = player_actions
         obs, rewards, dones, infos = env.step(actions)
         # imgs += [env.render("rgb_array", width=640, height=640)]
