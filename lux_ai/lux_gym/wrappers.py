@@ -129,117 +129,117 @@ from ..lux.config import EnvConfig
 #         }
 #
 #
-# class VecEnv(gym.Env):
-#     def __init__(self, envs: List[gym.Env]):
-#         self.envs = envs
-#         self.last_outs = [() for _ in range(len(self.envs))]
-#
-#     @staticmethod
-#     def _stack_dict(x: List[Union[Dict, np.ndarray]]) -> Union[Dict, np.ndarray]:
-#         if isinstance(x[0], dict):
-#             return {key: VecEnv._stack_dict([i[key] for i in x]) for key in x[0].keys()}
-#         else:
-#             return np.stack([arr for arr in x], axis=0)
-#
-#     @staticmethod
-#     def _vectorize_env_outs(env_outs: List[Tuple]) -> Tuple:
-#         obs_list, reward_list, done_list, info_list = zip(*env_outs)
-#         obs_stacked = VecEnv._stack_dict(obs_list)
-#         reward_stacked = np.array(reward_list)
-#         done_stacked = np.array(done_list)
-#         info_stacked = VecEnv._stack_dict(info_list)
-#         return obs_stacked, reward_stacked, done_stacked, info_stacked
-#
-#     def reset(self, force: bool = False, **kwargs):
-#         if force:
-#             # noinspection PyArgumentList
-#             self.last_outs = [env.reset(**kwargs) for env in self.envs]
-#             return VecEnv._vectorize_env_outs(self.last_outs)
-#
-#         for i, env in enumerate(self.envs):
-#             # Check if env finished
-#             if self.last_outs[i][2]:
-#                 # noinspection PyArgumentList
-#                 self.last_outs[i] = env.reset(**kwargs)
-#         return VecEnv._vectorize_env_outs(self.last_outs)
-#
-#     def step(self, action: Dict[str, np.ndarray]):
-#         actions = [
-#             {key: val[i] for key, val in action.items()} for i in range(len(self.envs))
-#         ]
-#         self.last_outs = [env.step(a) for env, a in zip(self.envs, actions)]
-#         return VecEnv._vectorize_env_outs(self.last_outs)
-#
-#     def render(self, mode: str = "human", **kwargs):
-#         # noinspection PyArgumentList
-#         return self.envs[kwargs["idx"]].render(mode, **kwargs)
-#
-#     def close(self):
-#         return [env.close() for env in self.envs]
-#
-#     def seed(self, seed: Optional[int] = None) -> list:
-#         if seed is not None:
-#             return [env.seed(seed + i) for i, env in enumerate(self.envs)]
-#         else:
-#             return [env.seed(seed) for i, env in enumerate(self.envs)]
-#
-#     @property
-#     def unwrapped(self) -> List[gym.Env]:
-#         return [env.unwrapped for env in self.envs]
-#
-#     @property
-#     def action_space(self) -> List[gym.spaces.Dict]:
-#         return [env.action_space for env in self.envs]
-#
-#     @property
-#     def observation_space(self) -> List[gym.spaces.Dict]:
-#         return [env.observation_space for env in self.envs]
-#
-#     @property
-#     def metadata(self) -> List[Dict]:
-#         return [env.metadata for env in self.envs]
-#
-#
-# class PytorchEnv(gym.Wrapper):
-#     def __init__(self, env: Union[gym.Env, VecEnv], device: torch.device = torch.device("cpu")):
-#         super(PytorchEnv, self).__init__(env)
-#         self.device = device
-#
-#     def reset(self, **kwargs):
-#         return tuple([self._to_tensor(out) for out in super(PytorchEnv, self).reset(**kwargs)])
-#
-#     def step(self, action: Dict[str, torch.Tensor]):
-#         action = {
-#             key: val.cpu().numpy() for key, val in action.items()
-#         }
-#         return tuple([self._to_tensor(out) for out in super(PytorchEnv, self).step(action)])
-#
-#     def _to_tensor(self, x: Union[Dict, np.ndarray]) -> Dict[str, Union[Dict, torch.Tensor]]:
-#         if isinstance(x, dict):
-#             return {key: self._to_tensor(val) for key, val in x.items()}
-#         else:
-#             return torch.from_numpy(x).to(self.device, non_blocking=True)
-#
-#
-# class DictEnv(gym.Wrapper):
-#     @staticmethod
-#     def _dict_env_out(env_out: tuple) -> dict:
-#         obs, reward, done, info = env_out
-#         assert "obs" not in info.keys()
-#         assert "reward" not in info.keys()
-#         assert "done" not in info.keys()
-#         return dict(
-#             obs=obs,
-#             reward=reward,
-#             done=done,
-#             info=info
-#         )
-#
-#     def reset(self, **kwargs):
-#         return DictEnv._dict_env_out(super(DictEnv, self).reset(**kwargs))
-#
-#     def step(self, action):
-#         return DictEnv._dict_env_out(super(DictEnv, self).step(action))
+class VecEnv(gym.Env):
+    def __init__(self, envs: List[gym.Env]):
+        self.envs = envs
+        self.last_outs = [() for _ in range(len(self.envs))]
+
+    @staticmethod
+    def _stack_dict(x: List[Union[Dict, np.ndarray]]) -> Union[Dict, np.ndarray]:
+        if isinstance(x[0], dict):
+            return {key: VecEnv._stack_dict([i[key] for i in x]) for key in x[0].keys()}
+        else:
+            return np.stack([arr for arr in x], axis=0)
+
+    @staticmethod
+    def _vectorize_env_outs(env_outs: List[Tuple]) -> Tuple:
+        obs_list, reward_list, done_list, info_list = zip(*env_outs)
+        obs_stacked = VecEnv._stack_dict(obs_list)
+        reward_stacked = np.array(reward_list)
+        done_stacked = np.array(done_list)
+        info_stacked = VecEnv._stack_dict(info_list)
+        return obs_stacked, reward_stacked, done_stacked, info_stacked
+
+    def reset(self, force: bool = False, **kwargs):
+        if force:
+            # noinspection PyArgumentList
+            self.last_outs = [env.reset(**kwargs) for env in self.envs]
+            return VecEnv._vectorize_env_outs(self.last_outs)
+
+        for i, env in enumerate(self.envs):
+            # Check if env finished
+            if self.last_outs[i][2]:
+                # noinspection PyArgumentList
+                self.last_outs[i] = env.reset(**kwargs)
+        return VecEnv._vectorize_env_outs(self.last_outs)
+
+    def step(self, action: Dict[str, np.ndarray]):
+        actions = [
+            {key: val[i] for key, val in action.items()} for i in range(len(self.envs))
+        ]
+        self.last_outs = [env.step(a) for env, a in zip(self.envs, actions)]
+        return VecEnv._vectorize_env_outs(self.last_outs)
+
+    def render(self, mode: str = "human", **kwargs):
+        # noinspection PyArgumentList
+        return self.envs[kwargs["idx"]].render(mode, **kwargs)
+
+    def close(self):
+        return [env.close() for env in self.envs]
+
+    def seed(self, seed: Optional[int] = None) -> list:
+        if seed is not None:
+            return [env.seed(seed + i) for i, env in enumerate(self.envs)]
+        else:
+            return [env.seed(seed) for i, env in enumerate(self.envs)]
+
+    @property
+    def unwrapped(self) -> List[gym.Env]:
+        return [env.unwrapped for env in self.envs]
+
+    @property
+    def action_space(self) -> List[gym.spaces.Dict]:
+        return [env.action_space for env in self.envs]
+
+    @property
+    def observation_space(self) -> List[gym.spaces.Dict]:
+        return [env.observation_space for env in self.envs]
+
+    @property
+    def metadata(self) -> List[Dict]:
+        return [env.metadata for env in self.envs]
+
+
+class PytorchEnv(gym.Wrapper):
+    def __init__(self, env: Union[gym.Env, VecEnv], device: torch.device = torch.device("cpu")):
+        super(PytorchEnv, self).__init__(env)
+        self.device = device
+
+    def reset(self, **kwargs):
+        return tuple([self._to_tensor(out) for out in super(PytorchEnv, self).reset(**kwargs)])
+
+    def step(self, action: Dict[str, torch.Tensor]):
+        action = {
+            key: val.cpu().numpy() for key, val in action.items()
+        }
+        return tuple([self._to_tensor(out) for out in super(PytorchEnv, self).step(action)])
+
+    def _to_tensor(self, x: Union[Dict, np.ndarray]) -> Dict[str, Union[Dict, torch.Tensor]]:
+        if isinstance(x, dict):
+            return {key: self._to_tensor(val) for key, val in x.items()}
+        else:
+            return torch.from_numpy(x).to(self.device, non_blocking=True)
+
+
+class DictEnv(gym.Wrapper):
+    @staticmethod
+    def _dict_env_out(env_out: tuple) -> dict:
+        obs, reward, done, info = env_out
+        assert "obs" not in info.keys()
+        assert "reward" not in info.keys()
+        assert "done" not in info.keys()
+        return dict(
+            obs=obs,
+            reward=reward,
+            done=done,
+            info=info
+        )
+
+    def reset(self, **kwargs):
+        return DictEnv._dict_env_out(super(DictEnv, self).reset(**kwargs))
+
+    def step(self, action):
+        return DictEnv._dict_env_out(super(DictEnv, self).step(action))
 
 class ObservationWrapper(gym.ObservationWrapper):
     """
@@ -337,10 +337,10 @@ class ObservationWrapper(gym.ObservationWrapper):
     @staticmethod
     def convert_obs(observation: Dict[str, Any], env_cfg: Any, empty_obs: Dict[str, Any]) -> Dict[str, npt.NDArray]:
         obs = empty_obs
-        shared_obs = observation['player_0']
+        shared_obs = observation
         board_maps = shared_obs["board"]
 
-        for p_idx, p_id in enumerate(observation.keys()):
+        for p_idx, p_id in enumerate(['player_0', 'player_1']): # FIXME don't hard code player ids
             for u_id,unit in shared_obs['units'][p_id].items():
                 cargo_space = env_cfg.ROBOTS[unit['unit_type']].CARGO_SPACE
                 battery_cap = env_cfg.ROBOTS[unit['unit_type']].BATTERY_CAPACITY
@@ -362,22 +362,25 @@ class ObservationWrapper(gym.ObservationWrapper):
                 # Box space will keep it limited to 1.0
                 power_cap = env_cfg.INIT_POWER_PER_FACTORY + env_cfg.max_episode_length * env_cfg.FACTORY_CHARGE
                 x, y = factory['pos']
+                square = (0, p_idx, slice(x-1, x+2), slice(y-1, y+2))
+                cell = (0, p_idx, x, y)
 
-                obs['factory'][0, p_idx, x-1 : x+2, y-1 : y+2] = 1
-                obs['factory_power'][0, p_idx, x-1 : x+2, y-1 : y+2] = factory['power'] / power_cap
-                obs['factory_ice'][0, p_idx, x-1 : x+2, y-1 : y+2] = factory['cargo']['ice']
-                obs['factory_ore'][0, p_idx, x-1 : x+2, y-1 : y+2] = factory['cargo']['ore']
-                obs['factory_water'][0, p_idx, x-1 : x+2, y-1 : y+2] = factory['cargo']['water']
-                obs['factory_metal'][0, p_idx, x-1 : x+2, y-1 : y+2] = factory['cargo']['metal']
-                obs['factory_strain'][0, p_idx, x-1 : x+2, y-1 : y+2] = factory['strain_id']
+                obs['factory'][square] = 1
+                obs['factory_power'][cell] = factory['power'] / power_cap
+                obs['factory_ice'][cell] = factory['cargo']['ice']
+                obs['factory_ore'][cell] = factory['cargo']['ore']
+                obs['factory_water'][cell] = factory['cargo']['water']
+                obs['factory_metal'][cell] = factory['cargo']['metal']
+                obs['factory_strain'][square] = factory['strain_id']
 
             for x,y in itertools.product(range(env_cfg.map_size), repeat=2):
-                obs['rubble'][0, 0, x, y] = board_maps["rubble"][x, y] / 5000
-                obs['ore'][0, 0, x, y] = board_maps["ore"][x, y] / 5000
-                obs['ice'][0, 0, x, y] = board_maps["ice"][x, y] / 5000
-                obs['lichen'][0, 0, x, y] = board_maps["rubble"][x, y] / 100
-                obs['lichen_spreading'][0, 0, x, y] = env_cfg.MIN_LICHEN_TO_SPREAD <= board_maps['lichen'][x, y] < env_cfg.MAX_LICHEN_PER_TILE
-                obs['lichen_strain'][0, 0, x, y] = board_maps["lichen_strains"][x, y]
+                cell = (0, 0, x, y)
+                obs['rubble'][cell] = board_maps["rubble"][x, y] / env_cfg.MAX_RUBBLE
+                obs['ore'][cell] = board_maps["ore"][x, y]
+                obs['ice'][cell] = board_maps["ice"][x, y]
+                obs['lichen'][cell] = board_maps["rubble"][x, y] / env_cfg.MAX_LICHEN_PER_TILE
+                obs['lichen_spreading'][cell] = env_cfg.MIN_LICHEN_TO_SPREAD <= board_maps['lichen'][x, y] < env_cfg.MAX_LICHEN_PER_TILE
+                obs['lichen_strain'][cell] = board_maps["lichen_strains"][x, y]
 
             obs['game_phase'][0, 0] = shared_obs['real_env_steps'] // 100
             obs['cycle_step'][0, 0] = shared_obs['real_env_steps'] % env_cfg.CYCLE_LENGTH
@@ -385,3 +388,125 @@ class ObservationWrapper(gym.ObservationWrapper):
             obs['is_day'][0, 0] = shared_obs['real_env_steps'] % env_cfg.CYCLE_LENGTH < env_cfg.DAY_LENGTH
 
         return obs
+
+from typing import Callable
+from luxai_s2.env import LuxAI_S2
+from luxai_s2.state import ObservationStateDict
+from luxai_s2.unit import ActionType, BidActionType, FactoryPlacementActionType
+from luxai_s2.utils import my_turn_to_place_factory
+from .controller import Controller
+
+class SinglePhaseWrapper(gym.Wrapper):
+    def __init__(
+            self,
+            env: LuxAI_S2,
+            bid_policy: Callable[
+                [str, ObservationStateDict], Dict[str, BidActionType]
+            ] = None,
+            factory_placement_policy: Callable[
+                [str, ObservationStateDict], Dict[str, FactoryPlacementActionType]
+            ] = None,
+            controller: Controller = None,
+    ) -> None:
+        """
+        A environment wrapper for Stable Baselines 3. It reduces the LuxAI_S2 env
+        into a single phase game and places the first two phases (bidding and factory placement) into the env.reset function so that
+        interacting agents directly start generating actions to play the third phase of the game.
+
+        It also accepts a Controller that translates action's in one action space to a Lux S2 compatible action
+
+        Parameters
+        ----------
+        bid_policy: Function
+            A function accepting player: str and obs: ObservationStateDict as input that returns a bid action
+            such as dict(bid=10, faction="AlphaStrike"). By default will bid 0
+        factory_placement_policy: Function
+            A function accepting player: str and obs: ObservationStateDict as input that returns a factory placement action
+            such as dict(spawn=np.array([2, 4]), metal=150, water=150). By default will spawn in a random valid location with metal=150, water=150
+        controller : Controller
+            A controller that parameterizes the action space into something more usable and converts parameterized actions to lux actions.
+            See luxai_s2/wrappers/controllers.py for available controllers and how to make your own
+        """
+        gym.Wrapper.__init__(self, env)
+        self.env = env
+
+        assert controller is not None
+
+        # set our controller and replace the action space
+        self.controller = controller
+        self.action_space = controller.action_space
+
+        # The simplified wrapper removes the first two phases of the game by using predefined policies (trained or heuristic)
+        # to handle those two phases during each reset
+        if factory_placement_policy is None:
+            def factory_placement_policy(player, obs: ObservationStateDict):
+                potential_spawns = np.array(
+                    list(zip(*np.where(obs["board"]["valid_spawns_mask"] == 1)))
+                )
+                spawn_loc = potential_spawns[
+                    np.random.randint(0, len(potential_spawns))
+                ]
+                return dict(spawn=spawn_loc, metal=150, water=150)
+
+        self.factory_placement_policy = factory_placement_policy
+        if bid_policy is None:
+            def bid_policy(player, obs: ObservationStateDict):
+                faction = "AlphaStrike"
+                if player == "player_1":
+                    faction = "MotherMars"
+                return dict(bid=0, faction=faction)
+
+        self.bid_policy = bid_policy
+
+        self.prev_obs = None
+
+    def step(self, action: Dict[str, npt.NDArray]):
+
+        # here, for each agent in the game we translate their action into a Lux S2 action
+        lux_action = dict()
+        for agent in self.env.agents:
+            if agent in action:
+                lux_action[agent] = self.controller.action_to_lux_action(
+                    agent=agent, obs=self.prev_obs, action=action[agent]
+                )
+            else:
+                lux_action[agent] = dict()
+
+        # lux_action is now a dict mapping agent name to an action
+        obs, reward, done, info = self.env.step(lux_action)
+        self.prev_obs = obs
+        return obs, reward, done, info
+
+    def reset(self, **kwargs):
+        # we upgrade the reset function here
+
+        # we call the original reset function first
+        obs = self.env.reset(**kwargs)
+
+        # then use the bid policy to go through the bidding phase
+        action = dict()
+        for agent in self.env.agents:
+            action[agent] = self.bid_policy(agent, obs[agent])
+        obs, _, _, _ = self.env.step(action)
+
+        # while real_env_steps < 0, we are in the factory placement phase
+        # so we use the factory placement policy to step through this
+        while self.env.state.real_env_steps < 0:
+            action = dict()
+            for agent in self.env.agents:
+                if my_turn_to_place_factory(
+                        obs["player_0"]["teams"][agent]["place_first"],
+                        self.env.state.env_steps,
+                ):
+                    action[agent] = self.factory_placement_policy(agent, obs[agent])
+                else:
+                    action[agent] = dict()
+            obs, _, _, _ = self.env.step(action)
+        self.prev_obs = obs
+
+        return obs
+    '''
+    https://www.kaggle.com/code/stonet2000/rl-with-lux-2-rl-problem-solving
+    https://github.com/Lux-AI-Challenge/Lux-Design-S2/blob/077480b7f915fa3408626c2f6a2158b1a151049a/kits/python/agent.py
+    https://github.com/IsaiahPressman/Kaggle_Lux_AI_2021/blob/973a6c6c63211b6c7ab6fdf50e026e458d1f6e4e/internal_testing/hall_of_fame/09-07_01-44-10_10088000/main.py#L45
+    '''

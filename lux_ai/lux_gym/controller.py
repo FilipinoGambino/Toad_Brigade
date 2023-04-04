@@ -57,7 +57,7 @@ class Controller(ABC):
         pass
 
 
-class SimpleUnitDiscreteController(Controller):
+class LuxController(Controller):
     def __init__(self, env_cfg) -> None:
         """
         A simple controller that controls only the robot that will get spawned.
@@ -145,7 +145,7 @@ class SimpleUnitDiscreteController(Controller):
 
         # compute a factory occupancy map that will be useful for checking if a board tile
         # has a factory and which team's factory it is.
-        shared_obs = obs['player_0']
+        shared_obs = obs[agent]
 
         map_shape = (MAP_SIZE, MAP_SIZE)
 

@@ -106,8 +106,10 @@ if __name__ == "__main__":
         if env.state.real_env_steps >= steps: break
         actions = {}
         for player in env.agents:
-            o = obs[player]
-            player_actions = env.agents[player].act(env.state.real_env_steps, o)
+            step = env.state.real_env_steps
+
+            game_state = obs_to_game_state(step, env.env_cfg, obs[player])
+            player_actions = env.agents[player].act(step, game_state)
             actions[player] = player_actions
         obs, rewards, dones, infos = env.step(actions)
         # imgs += [env.render("rgb_array", width=640, height=640)]

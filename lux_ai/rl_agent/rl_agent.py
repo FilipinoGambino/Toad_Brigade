@@ -10,9 +10,14 @@ import os.path as osp
 import sys
 import numpy as np
 import torch
+from typing import Any
+
+from luxai_s2.env import LuxAI_S2
+from ..lux.game_state import GameState
+
 from stable_baselines3.ppo import PPO
 from ..lux.config import EnvConfig
-from ..lux_gym.wrappers import ObservationWrapper
+from ..lux_gym import wrappers
 from ..lux_gym.controller import SimpleUnitDiscreteController
 # SimpleUnitObservationWrapper
 
@@ -34,13 +39,28 @@ def my_turn_to_place_factory(place_first: bool, step: int):
 
 
 class Agent:
-    def __init__(self, player: str, env_cfg: EnvConfig) -> None:
+    def __init__(
+            self,
+            player: str,
+            env_cfg: EnvConfig,
+            controller: SimpleUnitDiscreteController = None,
+            policy: Any = None,
+    ) -> None:
         self.my_id = player
         self.opp_player = "player_1" if self.my_id == "player_0" else "player_0"
         np.random.seed(42)
         self.env_cfg: EnvConfig = env_cfg
         self.factories_to_place = self.env_cfg.MAX_FACTORIES
         self.bidding_done = False
+        self.controller = controller
+        self.policy = policy
+
+        env = LuxAI_S2(collect_stats=True)
+        env = wrappers.VecEnv([env])
+        env = wrappers.PytorchEnv(env, torch.device("cpu"))
+        env = wrappers.DictEnv(env)
+        self.env = env
+        self.env.reset()
 
         # directory = osp.dirname(__file__)
         # self.policy = PPO.load(osp.join(directory, MODEL_WEIGHTS_RELATIVE_PATH))
@@ -85,20 +105,20 @@ class Agent:
         water_metal = self.env_cfg.INIT_WATER_METAL_PER_FACTORY
         return dict(spawn=pos, metal=water_metal, water=water_metal)
 
-    def early_setup(self, step: int, game_state, remainingOverageTime: int = 60):
+    def early_setup(self, step: int, obs, remainingOverageTime: int = 60):
         if not self.bidding_done:
             # bid 0 to not waste resources bidding and declare as the default faction
             # you can bid -n to prefer going second or n to prefer going first in placement
             self.bidding_done = True
-            if self.my_id == "player_0": return dict(faction="AlphaStrike", bid=0)
+            if self.my_id == "player_0": return self.bid_policy(step, obs)
             else: return dict(faction="TheBuilders", bid=0)
         else: # factory placement period
             # how many factories you have left to place
             factories_to_place = self.factories_to_place
             # whether it is your turn to place a factory
-            my_turn_to_place = my_turn_to_place_factory(game_state.players[self.my_id].place_first, step)
+            my_turn_to_place = my_turn_to_place_factory(obs.players[self.my_id].place_first, step)
             if factories_to_place > 0 and my_turn_to_place:
-                return self.factory_placement_policy(step,game_state)
+                return self.factory_placement_policy(step,obs)
             return dict()
 
     def act(self, step: int, obs, remainingOverageTime: int = 60):
@@ -106,21 +126,16 @@ class Agent:
         # note that SimpleUnitObservationWrapper takes input as the full observation for both players and returns an obs for players
         # raw_obs = dict(player_0=obs, player_1=obs)
         # obs = SimpleUnitObservationWrapper.convert_obs(raw_obs, env_cfg=self.env_cfg)
-        obs = ObservationWrapper(self.env_cfg, obs).observation(obs)
-        obs = torch.from_numpy(obs).float()
         with torch.no_grad():
             # to improve performance, we have a rule based action mask generator for the controller used
             # which will force the agent to generate actions that are valid only.
             action_mask = (
-                torch.from_numpy(self.controller.action_masks(self.my_id, raw_obs))
-                .unsqueeze(0)
+                self.controller.action_masks(self.my_id, obs)
                 .bool()
             )
 
             # SB3 doesn't support invalid action masking. So we do it ourselves here
-            features = self.policy.policy.features_extractor(obs.unsqueeze(0))
-            x = self.policy.policy.mlp_extractor.shared_net(features)
-            logits = self.policy.policy.action_net(x)  # shape (1, N) where N=12 for the default controller
+            logits = self.policy(obs.unsqueeze(0))
 
             logits[~action_mask] = -1e8  # mask out invalid actions
             dist = torch.distributions.Categorical(logits=logits)
@@ -129,8 +144,16 @@ class Agent:
         # use our controller which we trained with in train.py to generate a Lux S2 compatible action
         lux_action = self.controller.action_to_lux_action(
             self.my_id,
-            raw_obs,
-            actions[0]
+            obs,
+            actions
         )
 
         return lux_action
+
+    @property
+    def unwrapped_env(self) -> LuxEnv:
+        return self.env.unwrapped[0]
+
+    @property
+    def game_state(self) -> GameState:
+        return self.unwrapped_env.game_state
