@@ -457,8 +457,14 @@ class SinglePhaseWrapper(gym.Wrapper):
         # we call the original reset function first
         obs = self.env.reset(**kwargs)
         self.env.agents = {
-            player_id: Agent(player_id, self.env.env_cfg, LuxController(self.env_cfg))
-            for player_id in self.env.possible_agents}
+            player_id: Agent(
+                player_id,
+                self.env.env_cfg,
+                controller=LuxController(self.env_cfg),
+                policy=None,
+            )
+            for player_id in self.env.possible_agents
+        }
         # print(vars(self.env.agents['player_0']))
         # then use the bid policy to go through the bidding phase
         action = dict()
