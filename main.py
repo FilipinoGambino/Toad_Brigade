@@ -4,11 +4,12 @@ import sys
 from argparse import Namespace
 import matplotlib.pyplot as plt
 
-from lux_ai.rl_agent.rl_agent import Agent
+from lux_ai.lux_gym.agent import Agent
 from lux_ai.lux.config import EnvConfig
 from lux_ai.lux.game_state import obs_to_game_state#, process_action
 from lux_ai.lux_gym.obs_spaces import FixedShapeObs
-from lux_ai.lux_gym.controller import SimpleUnitDiscreteController
+from lux_ai.lux_gym.controller import LuxController
+from lux_ai.lux_gym import wrappers
 
 from luxai_s2.env import LuxAI_S2
 
@@ -74,33 +75,18 @@ if __name__ == "__main__":
     env = LuxAI_S2(collect_stats=True, verbose=4)
     env.env_cfg = env.state.env_cfg
     env.env_steps = env.state.env_steps
+    env.agents = {player_id: Agent(player_id, env.env_cfg) for player_id in env.possible_agents}
+    env = wrappers.GameStateWrapper(env)
+    env = wrappers.SinglePhaseWrapper(env)
 
     obs = env.reset(seed=42)
-    img = env.render("rgb_array")
-    # plt.imshow(img)
-    # plt.show()
-    # print(obs['player_0']['board'].keys())
-    steps = 1000
-    # imgs = []
-    env.agents = {player_id: Agent(player_id, env.env_cfg) for player_id in env.possible_agents}
 
-    # send actions to engine
-    while env.state.real_env_steps < 0:
-        print(f"step: {env.state.real_env_steps}")
-        actions = {}
-        for player in env.agents:
-            step = env.state.real_env_steps
-
-            game_state = obs_to_game_state(step, env.env_cfg, obs[player])
-            player_actions = env.agents[player].early_setup(step, game_state)
-            actions[player] = player_actions
-
-        print(f"actions: {actions}")
-        obs, _, _, _ = env.step(actions)
     img = env.render("rgb_array")
     plt.imshow(img)
-    plt.show()
-        # imgs += [env.render("rgb_array", width=640, height=640)]
+    # plt.show()
+
+    steps = 1000
+    # imgs = []
     done = False
     while not done:
         if env.state.real_env_steps >= steps: break
@@ -108,8 +94,7 @@ if __name__ == "__main__":
         for player in env.agents:
             step = env.state.real_env_steps
 
-            game_state = obs_to_game_state(step, env.env_cfg, obs[player])
-            player_actions = env.agents[player].act(step, game_state)
+            player_actions = env.agents[player].act(step, obs)
             actions[player] = player_actions
         obs, rewards, dones, infos = env.step(actions)
         # imgs += [env.render("rgb_array", width=640, height=640)]

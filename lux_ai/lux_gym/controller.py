@@ -7,6 +7,8 @@ from gym import spaces
 
 from abc import ABC
 
+from lux_ai.lux.game_state import GameState
+
 import luxai_s2.unit as luxai_unit
 from luxai_s2.unit import UnitType
 from luxai_s2.config import EnvConfig
@@ -50,7 +52,7 @@ class Controller(ABC):
         """
         pass
 
-    def action_masks(self, agent: str, obs: Dict[str, Any]):
+    def action_masks(self, agent: str, obs: GameState):
         """
         Generates a boolean action mask indicating in each discrete dimension whether it would be valid or not
         """
@@ -131,7 +133,7 @@ class LuxController(Controller):
 
         return lux_action
 
-    def action_masks(self, agent: str, obs: Dict[str, Any]):
+    def action_masks(self, agent: str, obs: GameState):
         """
         Masked Actions:
             Move -> Out-of-bounds / moving onto enemy factory tiles / not enough power
@@ -145,7 +147,6 @@ class LuxController(Controller):
 
         # compute a factory occupancy map that will be useful for checking if a board tile
         # has a factory and which team's factory it is.
-        shared_obs = obs[agent]
 
         map_shape = (MAP_SIZE, MAP_SIZE)
 
@@ -192,18 +193,18 @@ class LuxController(Controller):
         move_mask[3, -1, :] = False # Down
         move_mask[4, :, 0] = False # Left
 
-        ally_lichen_strains = np.zeros(self.env_cfg.MAX_FACTORIES)
+        ally_lichen_strains = np.zeros(self.env_cfg.MAX_FACTORIES * 2)
 
         # 0: center, 1: up, 2: right, 3: down, 4: left
         deltas = np.array([[0, 0], [1, 0], [0, 1], [-1, 0], [0, -1]])
 
-        for player in shared_obs['factories'].keys():
-            for factory_id in shared_obs['factories'][player]:
-                factory = shared_obs['factories'][player][factory_id]
-                row,col = factory['pos']
-                power = factory['power']
-                metal = factory['cargo']['metal']
-                strain = factory['strain_id']
+        for player in obs.players.keys():
+            for factory_id in obs.factories[player]:
+                factory = obs.factories[player][factory_id]
+                row,col = factory.pos
+                power = factory.power
+                metal = factory.cargo.metal
+                strain = factory.strain_id
 
                 factories_map[ # Factories are always 3x3 so no need to check out-of-bounds
                     0,
@@ -243,11 +244,10 @@ class LuxController(Controller):
             0
         )
 
-        _, index = np.unique(shared_obs['board']['lichen_strains'], return_inverse=True)
+        _, index = np.unique(obs.board.lichen_strains, return_inverse=True)
         ally_lichen_map = ally_lichen_strains[index].reshape((1, *map_shape))
 
-        res_map = np.stack([shared_obs['board'][res] for res in ['rubble', 'ore', 'ice', 'lichen']], axis=0)
-        board_sum = np.sum(res_map, axis=0, keepdims=True)
+        board_sum = obs.board.board_sum
 
         dig_mask = np.where(
             (factories_map == 0) # Not on factory tile
@@ -265,13 +265,12 @@ class LuxController(Controller):
             (4, *map_shape), dtype=int
         )
 
-        units = shared_obs['units'][agent]
-        for unit in units.values():
-            weight_class = unit['unit_type']
-            row,col = unit['pos']
-            power = unit['power']
-            ice = unit['cargo']['ice']
-            ore = unit['ore']['ore']
+        for unit in obs.units[agent]:
+            weight_class = unit.unit_type
+            row,col = unit.pos
+            power = unit.power
+            ice = unit.cargo.ice
+            ore = unit.cargo.ore
 
             # Robots can only be on top of one another on allied city tiles where they also
             # shouldn't be blowing up, so we can keep this as a single action/mask instead of seperate
@@ -282,7 +281,7 @@ class LuxController(Controller):
             bot_cfg = ROBOTS[weight_class]
             power_cap = bot_cfg.MOVE_COST
             for idx,(drow,dcol) in enumerate(deltas):
-                rubble_count = shared_obs['board']['rubble'][row+drow,col+dcol]
+                rubble_count = obs['board']['rubble'][row+drow,col+dcol]
                 rubble_tax = rubble_count * bot_cfg.RUBBLE_MOVEMENT_COST
                 move_tax = rubble_tax + bot_cfg.MOVE_COST
                 if power < move_tax:

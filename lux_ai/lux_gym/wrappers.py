@@ -8,6 +8,15 @@ import numpy.typing as npt
 import itertools
 
 from ..lux.config import EnvConfig
+from typing import Callable
+from luxai_s2.env import LuxAI_S2
+from luxai_s2.state import ObservationStateDict
+from luxai_s2.unit import ActionType, BidActionType, FactoryPlacementActionType
+from luxai_s2.utils import my_turn_to_place_factory
+from .controller import LuxController
+from lux_ai.lux_gym import agent
+from ..lux.game_state import obs_to_game_state, GameState
+from lux_ai.lux_gym.agent import Agent
 
 #
 # # from .act_spaces import ACTION_MEANINGS
@@ -16,18 +25,25 @@ from ..lux.config import EnvConfig
 # from ..utility_constants import MAP_SIZE
 #
 #
-# class SharedObs(gym.Wrapper):
-#     @staticmethod
-#     def _get_shared_observation(obs: Dict[str, np.array]) -> np.array:
-#         assert obs['player_0'] == obs['player_1'], "player observations not identical"
-#         shared_obs = obs['player_0']
-#         return shared_obs
-#
-#     def reset(self, **kwargs):
-#         return SharedObs._get_shared_observation(super(SharedObs, self).reset(**kwargs))
-#
-#     def step(self, actions):
-#         return SharedObs._get_shared_observation(super(SharedObs, self).step(actions))
+
+class GameStateWrapper(gym.Wrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        self.env_cfg = env.env_cfg
+
+    def reset(self, **kwargs):
+        # observation, reward, done, info = self.env.reset(**kwargs)
+        # return self.observation(observation), reward, done, info
+        observation = self.env.reset(**kwargs)
+        return self.observation(observation)
+
+    def step(self, action):
+        observation, reward, done, info = self.env.step(action)
+        return self.observation(observation), reward, done, info
+
+    def observation(self, obs: Dict) -> GameState:
+        return obs_to_game_state(self.env_cfg, obs['player_0'])
+
 #
 #
 # class RewardSpaceWrapper(gym.Wrapper):
@@ -127,8 +143,8 @@ from ..lux.config import EnvConfig
 #                 "carts",
 #             ]
 #         }
-#
-#
+
+
 class VecEnv(gym.Env):
     def __init__(self, envs: List[gym.Env]):
         self.envs = envs
@@ -252,8 +268,7 @@ class ObservationWrapper(gym.ObservationWrapper):
     - distance vector to first factory
     """
 
-    def __init__(self, env_cfg: EnvConfig, sample_obs) -> None:
-        super().__init__(sample_obs)
+    def __init__(self, env_cfg: EnvConfig) -> None:
         p = 2  # number of players
         env_cfg = env_cfg
         x = y = env_cfg.map_size
@@ -323,6 +338,9 @@ class ObservationWrapper(gym.ObservationWrapper):
         })
         self._empty_obs = {}
 
+        sample_obs = self.observation_space.sample()
+        super().__init__(sample_obs)
+
     def observation(self, observation):
         for key, spec in self.observation_space.spaces.items():
             if isinstance(spec, gym.spaces.MultiBinary) or isinstance(spec, gym.spaces.MultiDiscrete):
@@ -389,24 +407,10 @@ class ObservationWrapper(gym.ObservationWrapper):
 
         return obs
 
-from typing import Callable
-from luxai_s2.env import LuxAI_S2
-from luxai_s2.state import ObservationStateDict
-from luxai_s2.unit import ActionType, BidActionType, FactoryPlacementActionType
-from luxai_s2.utils import my_turn_to_place_factory
-from .controller import Controller
-
 class SinglePhaseWrapper(gym.Wrapper):
     def __init__(
             self,
             env: LuxAI_S2,
-            bid_policy: Callable[
-                [str, ObservationStateDict], Dict[str, BidActionType]
-            ] = None,
-            factory_placement_policy: Callable[
-                [str, ObservationStateDict], Dict[str, FactoryPlacementActionType]
-            ] = None,
-            controller: Controller = None,
     ) -> None:
         """
         A environment wrapper for Stable Baselines 3. It reduces the LuxAI_S2 env
@@ -429,48 +433,19 @@ class SinglePhaseWrapper(gym.Wrapper):
         """
         gym.Wrapper.__init__(self, env)
         self.env = env
-
-        assert controller is not None
-
-        # set our controller and replace the action space
-        self.controller = controller
-        self.action_space = controller.action_space
-
-        # The simplified wrapper removes the first two phases of the game by using predefined policies (trained or heuristic)
-        # to handle those two phases during each reset
-        if factory_placement_policy is None:
-            def factory_placement_policy(player, obs: ObservationStateDict):
-                potential_spawns = np.array(
-                    list(zip(*np.where(obs["board"]["valid_spawns_mask"] == 1)))
-                )
-                spawn_loc = potential_spawns[
-                    np.random.randint(0, len(potential_spawns))
-                ]
-                return dict(spawn=spawn_loc, metal=150, water=150)
-
-        self.factory_placement_policy = factory_placement_policy
-        if bid_policy is None:
-            def bid_policy(player, obs: ObservationStateDict):
-                faction = "AlphaStrike"
-                if player == "player_1":
-                    faction = "MotherMars"
-                return dict(bid=0, faction=faction)
-
-        self.bid_policy = bid_policy
-
         self.prev_obs = None
 
     def step(self, action: Dict[str, npt.NDArray]):
 
         # here, for each agent in the game we translate their action into a Lux S2 action
         lux_action = dict()
-        for agent in self.env.agents:
+        for agent_id, agent in self.env.agents.items():
             if agent in action:
-                lux_action[agent] = self.controller.action_to_lux_action(
-                    agent=agent, obs=self.prev_obs, action=action[agent]
+                lux_action[agent_id] = agent.controller.action_to_lux_action(
+                    agent=agent_id, obs=self.prev_obs, actions=action[agent_id]
                 )
             else:
-                lux_action[agent] = dict()
+                lux_action[agent_id] = dict()
 
         # lux_action is now a dict mapping agent name to an action
         obs, reward, done, info = self.env.step(lux_action)
@@ -479,34 +454,32 @@ class SinglePhaseWrapper(gym.Wrapper):
 
     def reset(self, **kwargs):
         # we upgrade the reset function here
-
         # we call the original reset function first
         obs = self.env.reset(**kwargs)
-
+        self.env.agents = {
+            player_id: Agent(player_id, self.env.env_cfg, LuxController(self.env_cfg))
+            for player_id in self.env.possible_agents}
+        # print(vars(self.env.agents['player_0']))
         # then use the bid policy to go through the bidding phase
         action = dict()
-        for agent in self.env.agents:
-            action[agent] = self.bid_policy(agent, obs[agent])
+        for agent_id, agent in self.env.agents.items():
+            action[agent_id] = agent.bid_policy(obs)
         obs, _, _, _ = self.env.step(action)
-
         # while real_env_steps < 0, we are in the factory placement phase
         # so we use the factory placement policy to step through this
+        step = 1
         while self.env.state.real_env_steps < 0:
             action = dict()
-            for agent in self.env.agents:
+            for agent_id, agent in self.env.agents.items():
                 if my_turn_to_place_factory(
-                        obs["player_0"]["teams"][agent]["place_first"],
-                        self.env.state.env_steps,
+                        obs.players[agent_id].place_first,
+                        step,
                 ):
-                    action[agent] = self.factory_placement_policy(agent, obs[agent])
+                    action[agent_id] = agent.factory_placement_policy(obs)
                 else:
-                    action[agent] = dict()
+                    action[agent_id] = dict()
             obs, _, _, _ = self.env.step(action)
+            step += 1
         self.prev_obs = obs
 
         return obs
-    '''
-    https://www.kaggle.com/code/stonet2000/rl-with-lux-2-rl-problem-solving
-    https://github.com/Lux-AI-Challenge/Lux-Design-S2/blob/077480b7f915fa3408626c2f6a2158b1a151049a/kits/python/agent.py
-    https://github.com/IsaiahPressman/Kaggle_Lux_AI_2021/blob/973a6c6c63211b6c7ab6fdf50e026e458d1f6e4e/internal_testing/hall_of_fame/09-07_01-44-10_10088000/main.py#L45
-    '''

@@ -17,7 +17,6 @@ from ..lux.game_state import GameState
 
 from stable_baselines3.ppo import PPO
 from ..lux.config import EnvConfig
-from ..lux_gym import wrappers
 from ..lux_gym.controller import LuxController
 # SimpleUnitObservationWrapper
 
@@ -55,23 +54,19 @@ class Agent:
         self.controller = controller
         self.policy = policy
 
-        env = LuxAI_S2(collect_stats=True)
-        env = wrappers.VecEnv([env])
-        env = wrappers.PytorchEnv(env, torch.device("cpu"))
-        env = wrappers.DictEnv(env)
-        self.env = env
-        self.env.reset()
-
         # directory = osp.dirname(__file__)
         # self.policy = PPO.load(osp.join(directory, MODEL_WEIGHTS_RELATIVE_PATH))
 
         # self.controller = SimpleUnitDiscreteController(self.env_cfg)
 
-    def bid_policy(self, step: int, obs, remainingOverageTime: int = 60):
+    def bid_policy(self, obs, remainingOverageTime: int = 60):
         # the policy here is the same one used in the RL tutorial: https://www.kaggle.com/code/stonet2000/rl-with-lux-2-rl-problem-solving
-        return dict(faction="AlphaStrike", bid=0)
+        if self.my_id == 'player_0':
+            return dict(faction="AlphaStrike", bid=0)
+        else:
+            return dict(faction="TheBuilders", bid=0)
 
-    def factory_placement_policy(self, step: int, obs, remainingOverageTime: int = 60):
+    def factory_placement_policy(self, obs, remainingOverageTime: int = 60):
         # the policy here is the same one used in the RL tutorial: https://www.kaggle.com/code/stonet2000/rl-with-lux-2-rl-problem-solving
         if obs.players[self.my_id].metal == 0:
             return dict()
@@ -107,11 +102,8 @@ class Agent:
 
     def early_setup(self, step: int, obs, remainingOverageTime: int = 60):
         if not self.bidding_done:
-            # bid 0 to not waste resources bidding and declare as the default faction
-            # you can bid -n to prefer going second or n to prefer going first in placement
             self.bidding_done = True
-            if self.my_id == "player_0": return self.bid_policy(step, obs)
-            else: return dict(faction="TheBuilders", bid=0)
+            return self.bid_policy
         else: # factory placement period
             # how many factories you have left to place
             factories_to_place = self.factories_to_place
@@ -129,13 +121,10 @@ class Agent:
         with torch.no_grad():
             # to improve performance, we have a rule based action mask generator for the controller used
             # which will force the agent to generate actions that are valid only.
-            action_mask = (
-                self.controller.action_masks(self.my_id, obs)
-                .bool()
-            )
+            action_mask = self.controller.action_masks(self.my_id, obs)
 
             # SB3 doesn't support invalid action masking. So we do it ourselves here
-            logits = self.policy(obs.unsqueeze(0))
+            logits = self.policy(obs.unsqueeze(0)) # FIXME Start the policy!!!
 
             logits[~action_mask] = -1e8  # mask out invalid actions
             dist = torch.distributions.Categorical(logits=logits)

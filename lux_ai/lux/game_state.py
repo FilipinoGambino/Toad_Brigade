@@ -1,13 +1,13 @@
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Dict, Any
 import numpy as np
 from .cargo import UnitCargo
 from .config import EnvConfig
-from .player import Player, FactionTypes
+from .player import Player
 from .robot import Robot
 from .factory import Factory
 
-def obs_to_game_state(step, env_cfg: EnvConfig, obs):
+def obs_to_game_state(env_cfg: EnvConfig, obs: Dict[str, Any]):
     units = dict()
     for agent in obs["units"]:
         units[agent] = dict()
@@ -35,7 +35,7 @@ def obs_to_game_state(step, env_cfg: EnvConfig, obs):
             factories[agent][unit_id] = factory
             factory_occupancy_map[factory.pos_slice] = factory.strain_id
     players = dict()
-    # FIXME Is "teams" correct?
+
     for agent in obs["teams"]:
         team_data = obs["teams"][agent]
         # team_data['factories_count'] =
@@ -50,7 +50,7 @@ def obs_to_game_state(step, env_cfg: EnvConfig, obs):
 
     game_state = GameState(
         env_cfg=env_cfg,
-        env_steps=step,
+        real_env_steps=obs['real_env_steps'],
         board=Board(
             rubble=obs["board"]["rubble"],
             ice=obs["board"]["ice"],
@@ -84,39 +84,45 @@ class Board:
     lichen_per_team: int
     valid_spawns_mask: np.ndarray
 
+    @property
+    def board_sum(self):
+        resource_maps = np.stack([self.rubble, self.ore, self.ice, self.lichen], axis=0)
+        board_sum = np.sum(resource_maps, axis=0, keepdims=True)
+        return board_sum
+
 
 @dataclass
 class GameState:
     """
     A GameState object at step env_steps. Copied from luxai_s2/state/state.py
     """
-    env_steps: int
+    real_env_steps: int
     env_cfg: EnvConfig
     board: Board
     units: Dict[str, Dict[str, Robot]] = field(default_factory=dict)
     factories: Dict[str, Dict[str, Factory]] = field(default_factory=dict)
     players: Dict[str, Player] = field(default_factory=dict)
 
-    @property
-    def real_env_steps(self):
-        """
-        the actual env step in the environment, which subtracts the time spent bidding and placing factories
-        """
-        if self.env_cfg.BIDDING_SYSTEM:
-            # + 1 for extra factory placement and + 1 for bidding step
-            return self.env_steps - (self.board.factories_per_team * 2 + 1)
-        else:
-            return self.env_steps
+    # @property
+    # def real_env_steps(self):
+    #     """
+    #     the actual env step in the environment, which subtracts the time spent bidding and placing factories
+    #     """
+    #     if self.env_cfg.BIDDING_SYSTEM:
+    #         # + 1 for extra factory placement and + 1 for bidding step
+    #         return self.env_steps - (self.board.factories_per_team * 2 + 1)
+    #     else:
+    #         return self.env_steps
 
     # various utility functions
     def is_day(self):
-        return self.real_env_steps % self.env_cfg.CYCLE_LENGTH < self.env_cfg.DAY_LENGTH
+        return self.env_steps % self.env_cfg.CYCLE_LENGTH < self.env_cfg.DAY_LENGTH
 
     def cycle_step(self):
-        return self.real_env_steps % self.env_cfg.CYCLE_LENGTH
+        return self.env_steps % self.env_cfg.CYCLE_LENGTH
 
     def game_phase(self):
-        return self.real_env_steps // 100
+        return self.env_steps // 100
 
     # @property
     # def lichen_count(self):
