@@ -114,15 +114,14 @@ class GameState:
     #     else:
     #         return self.env_steps
 
-    # various utility functions
     def is_day(self):
-        return self.env_steps % self.env_cfg.CYCLE_LENGTH < self.env_cfg.DAY_LENGTH
+        return self.real_env_steps % self.env_cfg.CYCLE_LENGTH < self.env_cfg.DAY_LENGTH
 
     def cycle_step(self):
-        return self.env_steps % self.env_cfg.CYCLE_LENGTH
+        return self.real_env_steps % self.env_cfg.CYCLE_LENGTH
 
     def game_phase(self):
-        return self.env_steps // 100
+        return self.real_env_steps // 100
 
     # @property
     # def lichen_count(self):

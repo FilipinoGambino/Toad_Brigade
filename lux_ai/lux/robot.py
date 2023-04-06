@@ -42,6 +42,11 @@ class Robot:
         if self.team_id == 0: return "player_0"
         return "player_1"
 
+    @property
+    def is_full(self):
+        space = self.env_cfg.ROBOTS[self.unit_type].CARGO_SPACE
+        return bool(self.cargo.sum_cargo == space)
+
     def action_queue_cost(self, game_state):
         cost = self.env_cfg.ROBOTS[self.unit_type].ACTION_QUEUE_POWER_COST
         return cost

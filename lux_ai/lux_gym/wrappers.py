@@ -268,9 +268,9 @@ class ObservationWrapper(gym.ObservationWrapper):
     - distance vector to first factory
     """
 
-    def __init__(self, env_cfg: EnvConfig) -> None:
+    def __init__(self, env: gym.Env) -> None:
         p = 2  # number of players
-        env_cfg = env_cfg
+        env_cfg = env.env_cfg
         x = y = env_cfg.map_size
         self.observation_space = spaces.Dict({
             # none, robot
@@ -353,57 +353,56 @@ class ObservationWrapper(gym.ObservationWrapper):
 
     # we make this method static so the submission/evaluation code can use this as well
     @staticmethod
-    def convert_obs(observation: Dict[str, Any], env_cfg: Any, empty_obs: Dict[str, Any]) -> Dict[str, npt.NDArray]:
+    def convert_obs(observation: GameState, env_cfg: Any, empty_obs: Dict[str, Any]) -> Dict[str, npt.NDArray]:
         obs = empty_obs
-        shared_obs = observation
-        board_maps = shared_obs["board"]
+        board_maps = observation.board
 
         for p_idx, p_id in enumerate(['player_0', 'player_1']): # FIXME don't hard code player ids
-            for u_id,unit in shared_obs['units'][p_id].items():
-                cargo_space = env_cfg.ROBOTS[unit['unit_type']].CARGO_SPACE
-                battery_cap = env_cfg.ROBOTS[unit['unit_type']].BATTERY_CAPACITY
-                weight_class = unit['unit_type'].lower()
-                x, y = unit['pos']
+            for u_id,unit in observation.units[p_id].items():
+                cargo_space = env_cfg.ROBOTS[unit.unit_type].CARGO_SPACE
+                battery_cap = env_cfg.ROBOTS[unit.unit_type].BATTERY_CAPACITY
+                weight_class = unit.unit_type.lower()
+                x, y = unit.pos
 
                 obs[f'{weight_class}_robot'][0, p_idx, x, y] = 1
                 obs[f'{weight_class}_count'][0, p_idx, x, y] += 1
-                obs[f'{weight_class}_power'][0, p_idx, x, y] = unit['power'] / battery_cap
-                obs[f'{weight_class}_ice'][0, p_idx, x, y] = unit['cargo']['ice'] / cargo_space
-                obs[f'{weight_class}_ore'][0, p_idx, x, y] = unit['cargo']['ore'] / cargo_space
-                obs[f'{weight_class}_water'][0, p_idx, x, y] = unit['cargo']['water'] / cargo_space
-                obs[f'{weight_class}_metal'][0, p_idx, x, y] = unit['cargo']['metal'] / cargo_space
-                obs[f'{weight_class}_cargo_full'][0, p_idx, x, y] = sum(unit['cargo'].values()) == cargo_space
+                obs[f'{weight_class}_power'][0, p_idx, x, y] = unit.power / battery_cap
+                obs[f'{weight_class}_ice'][0, p_idx, x, y] = unit.cargo.ice / cargo_space
+                obs[f'{weight_class}_ore'][0, p_idx, x, y] = unit.cargo.ore / cargo_space
+                obs[f'{weight_class}_water'][0, p_idx, x, y] = unit.cargo.water / cargo_space
+                obs[f'{weight_class}_metal'][0, p_idx, x, y] = unit.cargo.metal / cargo_space
+                obs[f'{weight_class}_cargo_full'][0, p_idx, x, y] = unit.is_full()
 
-            factories = shared_obs['factories'][p_id]
+            factories = observation.factories[p_id]
             for f_id,factory in factories.items():
                 # Lichen also gives power, but I'm hoping robots are picking up power to keep the available power lower
                 # Box space will keep it limited to 1.0
                 power_cap = env_cfg.INIT_POWER_PER_FACTORY + env_cfg.max_episode_length * env_cfg.FACTORY_CHARGE
-                x, y = factory['pos']
+                x, y = factory.pos
                 square = (0, p_idx, slice(x-1, x+2), slice(y-1, y+2))
                 cell = (0, p_idx, x, y)
 
                 obs['factory'][square] = 1
-                obs['factory_power'][cell] = factory['power'] / power_cap
-                obs['factory_ice'][cell] = factory['cargo']['ice']
-                obs['factory_ore'][cell] = factory['cargo']['ore']
-                obs['factory_water'][cell] = factory['cargo']['water']
-                obs['factory_metal'][cell] = factory['cargo']['metal']
-                obs['factory_strain'][square] = factory['strain_id']
+                obs['factory_power'][square] = factory.power / power_cap
+                obs['factory_ice'][square] = factory.cargo.ice
+                obs['factory_ore'][square] = factory.cargo.ore
+                obs['factory_water'][square] = factory.cargo.water
+                obs['factory_metal'][square] = factory.cargo.metal
+                obs['factory_strain'][square] = factory.strain_id
 
             for x,y in itertools.product(range(env_cfg.map_size), repeat=2):
                 cell = (0, 0, x, y)
-                obs['rubble'][cell] = board_maps["rubble"][x, y] / env_cfg.MAX_RUBBLE
-                obs['ore'][cell] = board_maps["ore"][x, y]
-                obs['ice'][cell] = board_maps["ice"][x, y]
-                obs['lichen'][cell] = board_maps["rubble"][x, y] / env_cfg.MAX_LICHEN_PER_TILE
-                obs['lichen_spreading'][cell] = env_cfg.MIN_LICHEN_TO_SPREAD <= board_maps['lichen'][x, y] < env_cfg.MAX_LICHEN_PER_TILE
-                obs['lichen_strain'][cell] = board_maps["lichen_strains"][x, y]
+                obs['rubble'][cell] = board_maps.rubble[x, y] / env_cfg.MAX_RUBBLE
+                obs['ore'][cell] = board_maps.ore[x, y]
+                obs['ice'][cell] = board_maps.ice[x, y]
+                obs['lichen'][cell] = board_maps.lichen[x, y] / env_cfg.MAX_LICHEN_PER_TILE
+                obs['lichen_spreading'][cell] = board_maps.lichen_spreading[x, y]
+                obs['lichen_strain'][cell] = board_maps.lichen_strains[x, y]
 
-            obs['game_phase'][0, 0] = shared_obs['real_env_steps'] // 100
-            obs['cycle_step'][0, 0] = shared_obs['real_env_steps'] % env_cfg.CYCLE_LENGTH
-            obs['turn'][0, 0] = shared_obs['real_env_steps'] / env_cfg.max_episode_length
-            obs['is_day'][0, 0] = shared_obs['real_env_steps'] % env_cfg.CYCLE_LENGTH < env_cfg.DAY_LENGTH
+            obs['game_phase'][0, 0] = observation.game_phase()
+            obs['cycle_step'][0, 0] = observation.cycle_step()
+            obs['turn'][0, 0] = observation.real_env_steps / env_cfg.max_episode_length
+            obs['is_day'][0, 0] = observation.is_day()
 
         return obs
 

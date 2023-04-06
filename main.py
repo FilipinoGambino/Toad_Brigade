@@ -75,15 +75,19 @@ if __name__ == "__main__":
     env = LuxAI_S2(collect_stats=True, verbose=4)
     env.env_cfg = env.state.env_cfg
     env.env_steps = env.state.env_steps
-    env.agents = {player_id: Agent(player_id, env.env_cfg) for player_id in env.possible_agents}
+    env.agents = {player_id: Agent(player_id, env.state.env_cfg) for player_id in env.possible_agents}
     env = wrappers.GameStateWrapper(env)
     env = wrappers.SinglePhaseWrapper(env)
-
+    env = wrappers.ObservationWrapper(env)
+    env = wrappers.PytorchEnv(env)
+    # TODO maybe CustromEnvWrapper fixes this?
+    #  https://www.kaggle.com/code/stonet2000/rl-with-lux-2-rl-problem-solving
     obs = env.reset(seed=42)
+    print(obs)
 
     img = env.render("rgb_array")
     plt.imshow(img)
-    # plt.show()
+    plt.show()
 
     steps = 1000
     # imgs = []
