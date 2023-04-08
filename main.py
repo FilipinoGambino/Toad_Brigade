@@ -72,25 +72,22 @@ if __name__ == "__main__":
     import numpy as np
     from lux_ai.lux_gym.wrappers import ObservationWrapper
 
-    env = LuxAI_S2(collect_stats=True, verbose=4)
+    env = LuxAI_S2(collect_stats=True, verbose=0)
     env.env_cfg = env.state.env_cfg
     env.env_steps = env.state.env_steps
     env.agents = {player_id: Agent(player_id, env.state.env_cfg) for player_id in env.possible_agents}
     env = wrappers.GameStateWrapper(env)
     env = wrappers.SinglePhaseWrapper(env)
-    env = wrappers.ObservationWrapper(env)
-    env = wrappers.PytorchEnv(env)
+    # env = wrappers.ObservationWrapper(env)
+    # env = wrappers.PytorchEnv(env)
     # TODO maybe CustromEnvWrapper fixes this?
     #  https://www.kaggle.com/code/stonet2000/rl-with-lux-2-rl-problem-solving
     obs = env.reset(seed=42)
-    print(obs)
 
-    img = env.render("rgb_array")
-    plt.imshow(img)
-    plt.show()
+    img = env.render("rgb_array", width=640, height=640)
 
     steps = 1000
-    # imgs = []
+    imgs = [img]
     done = False
     while not done:
         if env.state.real_env_steps >= steps: break
@@ -101,6 +98,6 @@ if __name__ == "__main__":
             player_actions = env.agents[player].act(step, obs)
             actions[player] = player_actions
         obs, rewards, dones, infos = env.step(actions)
-        # imgs += [env.render("rgb_array", width=640, height=640)]
+        imgs += [env.render("rgb_array", width=640, height=640)]
         done = dones["player_0"] and dones["player_1"]
-    # animate(imgs)
+    animate(imgs)

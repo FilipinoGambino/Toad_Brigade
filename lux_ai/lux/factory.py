@@ -17,30 +17,33 @@ class Factory:
     # lichen_tiles: np.ndarray
     env_cfg: EnvConfig
 
-    def _heavy_robot_metal_cost(self, game_state):
-        unit_cfg = self.env_cfg.ROBOTS["HEAVY"]
-        return unit_cfg.METAL_COST
+    @property
+    def pos_slice(self):
+        x,y = self.pos
+        return slice(x - 1, x + 2), slice(y - 1, y + 2)
 
-    def _heavy_robot_power_cost(self, game_state):
-        unit_cfg = self.env_cfg.ROBOTS["HEAVY"]
-        return unit_cfg.POWER_COST
+    def _heavy_robot_metal_cost(self):
+        return self.env_cfg.ROBOTS["HEAVY"].METAL_COST
 
-    def can_build_heavy(self, game_state):
-        return self.power >= self._heavy_robot_power_cost(game_state) and self.cargo.metal >= self._heavy_robot_metal_cost(game_state)
+    def _heavy_robot_power_cost(self):
+        return self.env_cfg.ROBOTS["HEAVY"].POWER_COST
+
+    def can_build_heavy(self):
+        return self.power >= self._heavy_robot_power_cost() \
+            and self.cargo.metal >= self._heavy_robot_metal_cost()
 
     def build_heavy(self):
         return 1
 
-    def _light_robot_metal_cost(self, game_state):
-        unit_cfg = self.env_cfg.ROBOTS["LIGHT"]
-        return unit_cfg.METAL_COST
+    def _light_robot_metal_cost(self):
+        return self.env_cfg.ROBOTS["LIGHT"].METAL_COST
 
-    def _light_robot_power_cost(self, game_state):
-        unit_cfg = self.env_cfg.ROBOTS["LIGHT"]
-        return unit_cfg.POWER_COST
+    def _light_robot_power_cost(self):
+        return self.env_cfg.ROBOTS["LIGHT"].POWER_COST
 
-    def can_build_light(self, game_state):
-        return self.power >= self._light_robot_power_cost(game_state) and self.cargo.metal >= self._light_robot_metal_cost(game_state)
+    def can_build_light(self):
+        return self.power >= self._light_robot_power_cost() \
+            and self.cargo.metal >= self._light_robot_metal_cost()
 
     def build_light(self):
         return 0
@@ -57,8 +60,3 @@ class Factory:
 
     def water_lichen(self):
         return 2
-
-    @property
-    def pos_slice(self):
-        x,y = self.pos
-        return slice(x - 1, x + 2), slice(y - 1, y + 2)

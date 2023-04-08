@@ -124,11 +124,13 @@ class Agent:
             action_mask = self.controller.action_masks(self.my_id, obs)
 
             # SB3 doesn't support invalid action masking. So we do it ourselves here
-            logits = self.policy(obs.unsqueeze(0)) # FIXME Start the policy!!!
-
-            logits[~action_mask] = -1e8  # mask out invalid actions
-            dist = torch.distributions.Categorical(logits=logits)
-            actions = dist.sample().cpu().numpy()  # shape (1, 1)
+            # logits = self.policy(obs.unsqueeze(0)) # FIXME Start the policy!!!
+            #
+            # logits[~action_mask] = -1e8  # mask out invalid actions
+            # dist = torch.distributions.Categorical(logits=logits)
+            # actions = dist.sample().cpu().numpy()  # shape (1, 1)
+            actions = np.random.randn(12, 48, 48)
+            actions[~action_mask] = -1e8
 
         # use our controller which we trained with in train.py to generate a Lux S2 compatible action
         lux_action = self.controller.action_to_lux_action(

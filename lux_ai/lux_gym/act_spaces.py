@@ -34,9 +34,8 @@ class Action(ABC):
 
 
 class FactoryBuildAction(Action):
-    def __init__(self, robot: str) -> None:
-        unit_type = "LIGHT"
-        super().__init__(f"build_{unit_type}_robot") # unit_type.name.lower()
+    def __init__(self, unit_type: str) -> None:
+        super().__init__(f"build_{unit_type.lower()}_robot")
         self.unit_type = unit_type
 
     def __str__(self) -> str:
@@ -106,7 +105,7 @@ class MoveAction(Action):
 
 class PickupAction(Action):
     '''
-    Always pickup to fill capacity.
+    Always pickup to fill capacity or max availability
     Only using power.
     '''
     def __init__(self, resource: int) -> None:
@@ -115,7 +114,7 @@ class PickupAction(Action):
         self.resource = resource
 
     def __str__(self) -> str:
-        return f"{self.act_type} {self.resource_name} to max capacity for unit type"
+        return f"{self.act_type} {self.resource_name} to max capacity for unit type or max availability"
 
     def __call__(self, **kwargs):
         return np.array([2, 0, self.resource, kwargs['pickup_amount'], kwargs['repeat'], kwargs['n']])

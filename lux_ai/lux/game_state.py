@@ -16,12 +16,14 @@ def obs_to_game_state(env_cfg: EnvConfig, obs: Dict[str, Any]):
             unit = Robot(
                 **unit_data,
                 unit_cfg=env_cfg.ROBOTS[unit_data["unit_type"]],
-                env_cfg=env_cfg
+                env_cfg=env_cfg,
+                only_power=True
             )
             unit.cargo = UnitCargo(**unit_data["cargo"])
             units[agent][unit_id] = unit
 
     factory_occupancy_map = np.full_like(obs["board"]["rubble"], fill_value=-1, dtype=int)
+    power_map = np.zeros_like(obs["board"]["rubble"], dtype=int)
     factories = dict()
     for agent in obs["factories"]:
         factories[agent] = dict()
@@ -34,6 +36,7 @@ def obs_to_game_state(env_cfg: EnvConfig, obs: Dict[str, Any]):
             factory.cargo = UnitCargo(**f_data["cargo"])
             factories[agent][unit_id] = factory
             factory_occupancy_map[factory.pos_slice] = factory.strain_id
+            power_map[factory.pos_slice] = factory.power
     players = dict()
 
     for agent in obs["teams"]:
@@ -58,6 +61,7 @@ def obs_to_game_state(env_cfg: EnvConfig, obs: Dict[str, Any]):
             lichen=obs["board"]["lichen"],
             lichen_strains=obs["board"]["lichen_strains"],
             lichen_spreading=lichen_spreading,
+            power=power_map,
             factory_occupancy_map=factory_occupancy_map,
             factories_per_team=obs["board"]["factories_per_team"],
             lichen_per_team=0,
@@ -79,6 +83,7 @@ class Board:
     lichen: np.ndarray
     lichen_strains: np.ndarray
     lichen_spreading: np.ndarray
+    power: np.ndarray
     factory_occupancy_map: np.ndarray
     factories_per_team: int
     lichen_per_team: int

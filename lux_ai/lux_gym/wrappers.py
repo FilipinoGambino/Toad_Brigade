@@ -437,17 +437,17 @@ class SinglePhaseWrapper(gym.Wrapper):
     def step(self, action: Dict[str, npt.NDArray]):
 
         # here, for each agent in the game we translate their action into a Lux S2 action
-        lux_action = dict()
-        for agent_id, agent in self.env.agents.items():
-            if agent in action:
-                lux_action[agent_id] = agent.controller.action_to_lux_action(
-                    agent=agent_id, obs=self.prev_obs, actions=action[agent_id]
-                )
-            else:
-                lux_action[agent_id] = dict()
+        # lux_action = dict()
+        # for agent_id, agent in self.env.agents.items():
+        #     if agent in action:
+        #         lux_action[agent_id] = agent.controller.action_to_lux_action(
+        #             agent=agent_id, obs=self.prev_obs, actions=action[agent_id]
+        #         )
+        #     else:
+        #         lux_action[agent_id] = dict()
 
         # lux_action is now a dict mapping agent name to an action
-        obs, reward, done, info = self.env.step(lux_action)
+        obs, reward, done, info = self.env.step(action)
         self.prev_obs = obs
         return obs, reward, done, info
 

@@ -23,7 +23,7 @@ from ..lux_gym.act_spaces import (
 )
 
 MAP_SIZE = EnvConfig.map_size
-FACTORY_ACTIONS = 3
+ROBOT_ACTIONS = 8 + 1
 ROBOTS = EnvConfig().ROBOTS
 ACTIONS = [
     MoveAction(move_dir=0), # no-op
@@ -35,8 +35,8 @@ ACTIONS = [
     DigAction(),
     SelfDestructAction(),
     RechargeAction(), # 5 steps enough? Most of the energy should be coming from factories as recharging is too slow
-    FactoryBuildAction(UnitType.LIGHT),
-    FactoryBuildAction(UnitType.HEAVY),
+    FactoryBuildAction(str(UnitType.LIGHT)),
+    FactoryBuildAction(str(UnitType.HEAVY)),
     FactoryWaterAction(),
 ]
 
@@ -94,19 +94,28 @@ class LuxController(Controller):
 
         super().__init__(action_space)
 
-    def action_to_lux_action(self, agent: str, obs: Dict[str, Any], actions: npt.NDArray):
-        shared_obs = obs['player_0']
+    def action_to_lux_action(self, agent: str, obs: GameState, actions: npt.NDArray):
         lux_action = dict()
-        unit_actions = np.argmax(actions[:FACTORY_ACTIONS,:,:], axis=0)
-        factory_actions = np.argmax(actions[FACTORY_ACTIONS:,:,:], axis=0)
 
-        units = shared_obs['units'][agent]
-        for unit_id in units.keys():
-            unit = units[unit_id]
-            weight_class = unit['unit_type']
+        unit_actions = actions.copy()
+        factory_actions = actions.copy()
+
+        unit_actions[ROBOT_ACTIONS:] = -1e8
+        factory_actions[:ROBOT_ACTIONS] = -1e8
+
+        # print([layer for layer in factory_actions])
+        # print(f"unit actions: {np.argwhere(unit_actions > -1000)}")
+        # print(f"factory actions: {np.argwhere(factory_actions > -1000)}")
+
+        unit_actions = unit_actions.argmax(axis=0)
+        factory_actions = factory_actions.argmax(axis=0)
+        print(unit_actions, factory_actions)
+
+        for unit_id, unit in obs.units[agent].items():
+            weight_class = unit.unit_type
             bot_cfg = ROBOTS[weight_class]
-            row,col = unit['pos']
-            power_space = bot_cfg.BATTERY_CAPACITY - unit['power']
+            row,col = unit.pos
+            power_space = min(bot_cfg.BATTERY_CAPACITY - unit.power, obs.board.power[row,col])
             steps = 0
 
             action = unit_actions[row,col]
@@ -119,18 +128,15 @@ class LuxController(Controller):
                         n=steps,
                     )
                 ]
-                if unit['action_queue']:
-                    if unit['action_queue'][0] != action_queue[0]: # FIXME if sequence of actions is used
+                if unit.action_queue:
+                    if unit.action_queue[0] != action_queue[0]: # FIXME if sequence of actions is used
                         lux_action[unit_id] = action_queue
 
-        factories = shared_obs['factories'][agent]
-        for factory_id in factories.keys():
-            factory = factories[factory_id]
-            row, col = factory['pos']
-
+        for factory_id, factory in obs.factories[agent].items():
+            row, col = factory.pos
             action = factory_actions[row, col]
-            lux_action[factory_id] = ACTIONS[action]()
-
+            lux_action[factory_id] = ACTIONS[action](repeat=0, n=0)
+        print(lux_action)
         return lux_action
 
     def action_masks(self, agent: str, obs: GameState):
@@ -163,12 +169,12 @@ class LuxController(Controller):
         # dig_mask = np.zeros_like(
         #     (1, *map_shape), dtype=bool
         # )
-        # self_destruct_mask = np.zeros_like(
-        #     (1, *map_shape), dtype=bool
-        # )
-        # recharge_mask = np.zeros_like(
-        #     (5, *map_shape), dtype=bool
-        # )
+        self_destruct_mask = np.ones_like(
+            (1, *map_shape), dtype=bool
+        )
+        recharge_mask = np.ones_like(
+            (1, *map_shape), dtype=bool
+        )
 
         # Factory action masks
         build_light_mask = np.zeros(
@@ -199,8 +205,7 @@ class LuxController(Controller):
         deltas = np.array([[0, 0], [1, 0], [0, 1], [-1, 0], [0, -1]])
 
         for player in obs.players.keys():
-            for factory_id in obs.factories[player]:
-                factory = obs.factories[player][factory_id]
+            for factory_id, factory in obs.factories[player].items():
                 row,col = factory.pos
                 power = factory.power
                 metal = factory.cargo.metal
@@ -213,9 +218,9 @@ class LuxController(Controller):
                 ] = (agent != player) + 1  # 0: no factory, 1: ally factory, 2: enemy factory
 
                 if agent == player:
-                    if power >= ROBOTS['LIGHT'].POWER_COST and metal >= ROBOTS['LIGHT'].METAL_COST:
+                    if factory.can_build_light():
                         build_light_mask[0, row, col] = True
-                    if power >= ROBOTS['HEAVY'].POWER_COST and metal >= ROBOTS['HEAVY'].METAL_COST:
+                    if factory.can_build_heavy():
                         build_heavy_mask[0, row, col] = True
 
                     # Allow transfer to ally factory tiles
@@ -261,30 +266,18 @@ class LuxController(Controller):
             1,
             0
         )
-        recharge_mask = np.ones( # 25%, 50%, 75%, 100%
-            (4, *map_shape), dtype=int
-        )
 
-        for unit in obs.units[agent]:
-            weight_class = unit.unit_type
+        for unit_id, unit in obs.units[agent].items():
             row,col = unit.pos
-            power = unit.power
-            ice = unit.cargo.ice
-            ore = unit.cargo.ore
 
             # Robots can only be on top of one another on allied city tiles where they also
             # shouldn't be blowing up, so we can keep this as a single action/mask instead of seperate
             # light and HEAVY actions/masks
-            if power < ROBOTS[weight_class].SELF_DESTRUCT_COST:
+            if unit.power < unit.self_destruct_cost():
                 self_destruct_mask[0, row, col] = False
 
-            bot_cfg = ROBOTS[weight_class]
-            power_cap = bot_cfg.MOVE_COST
-            for idx,(drow,dcol) in enumerate(deltas):
-                rubble_count = obs['board']['rubble'][row+drow,col+dcol]
-                rubble_tax = rubble_count * bot_cfg.RUBBLE_MOVEMENT_COST
-                move_tax = rubble_tax + bot_cfg.MOVE_COST
-                if power < move_tax:
+            for idx,_ in enumerate(deltas):
+                if unit.power < unit.move_cost(obs, idx):
                     move_mask[
                         idx,
                         row,
@@ -292,12 +285,12 @@ class LuxController(Controller):
                     ] = False
 
 
-            for power_perc in range(int(power / power_cap * recharge_mask.shape[0]), recharge_mask.shape[0]):
-                recharge_mask[
-                    0,
-                    row,
-                    col
-                ] = False
+            # for power_perc in range(int(power / power_cap * recharge_mask.shape[0]), recharge_mask.shape[0]):
+            #     recharge_mask[
+            #         0,
+            #         row,
+            #         col
+            #     ] = False
 
             # # direction (0 = center, 1 = up, 2 = right, 3 = down, 4 = left)
             # deltas = np.array([[0, 0], [0, -1], [1, 0], [0, 1], [-1, 0]])
