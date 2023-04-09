@@ -11,13 +11,16 @@ import sys
 import numpy as np
 import torch
 from typing import Any
+from pathlib import Path
+from types import SimpleNamespace
+import yaml
 
 from luxai_s2.env import LuxAI_S2
-from ..lux.game_state import GameState
+from lux_ai.lux.game_state import GameState
 
 from stable_baselines3.ppo import PPO
-from ..lux.config import EnvConfig
-from ..lux_gym.controller import LuxController
+from lux_ai.lux.config import EnvConfig
+from lux_ai.lux_gym.controller import LuxController
 # SimpleUnitObservationWrapper
 
 
@@ -25,6 +28,7 @@ from ..lux_gym.controller import LuxController
 # make sure the model weights are submitted with the other code files
 # any files in the logs folder are not necessary. Make sure to exclude the .zip extension here
 MODEL_WEIGHTS_RELATIVE_PATH = "./best_model"
+RL_AGENT_CONFIG_PATH = Path(__file__).parent / "agent_config.yaml"
 
 
 def my_turn_to_place_factory(place_first: bool, step: int):
@@ -44,7 +48,11 @@ class Agent:
             env_cfg: EnvConfig,
             controller: LuxController = None,
             policy: Any = None,
+            flags: SimpleNamespace = None,
     ) -> None:
+        with open(RL_AGENT_CONFIG_PATH, 'r') as f:
+            self.agent_flags = SimpleNamespace(**yaml.safe_load(f))
+
         self.my_id = player
         self.opp_player = "player_1" if self.my_id == "player_0" else "player_0"
         np.random.seed(42)
@@ -53,6 +61,7 @@ class Agent:
         self.bidding_done = False
         self.controller = controller
         self.policy = policy
+        self.flags = flags
 
         # directory = osp.dirname(__file__)
         # self.policy = PPO.load(osp.join(directory, MODEL_WEIGHTS_RELATIVE_PATH))

@@ -60,7 +60,7 @@ class Controller(ABC):
 
 
 class LuxController(Controller):
-    def __init__(self, env_cfg) -> None:
+    def __init__(self, env_cfg, flags) -> None:
         """
         A simple controller that controls only the robot that will get spawned.
         Moreover, it will always try to spawn one HEAVY robot if there are none regardless of action given
@@ -82,6 +82,7 @@ class LuxController(Controller):
 
         """
         self.env_cfg = env_cfg
+        self.flags = flags
 
         self.directions = dict(center=0, up=1, right=2, down=3, left=4)
         self.resources = dict(ice=0, ore=1, water=2, metal=3, power=4)
@@ -151,10 +152,17 @@ class LuxController(Controller):
             Repeat -> TODO
         """
 
+        map_shape = (MAP_SIZE, MAP_SIZE)
+
         # compute a factory occupancy map that will be useful for checking if a board tile
         # has a factory and which team's factory it is.
+        action_masks = {action: np.ones(
+            map_shape, dtype=int
+        )
+            for action_space in self.flags['action_spaces'].keys()
+            for action in self.flags['action_spaces'][action_space]
+        }
 
-        map_shape = (MAP_SIZE, MAP_SIZE)
 
         # Robot action masks
         move_mask = np.ones(  # 0: center, 1: up, 2: right, 3: down, 4: left
@@ -194,12 +202,13 @@ class LuxController(Controller):
 
 
         # Out of bounds
-        move_mask[1, 0, :] = False # Up
-        move_mask[2, :, -1] = False # Right
-        move_mask[3, -1, :] = False # Down
-        move_mask[4, :, 0] = False # Left
+        action_masks['move_up'][0, :] = False
+        action_masks['move_right'][:, -1] = False
+        action_masks['move_down'][-1, :] = False
+        action_masks['move_left'][:, 0] = False
 
-        ally_lichen_strains = np.zeros(self.env_cfg.MAX_FACTORIES * 2)
+        ally_lichen_strains = {player.agent: player.factory_strains for player in obs.players}
+        lichen_allegiance = np.zeros(map_shape)
 
         # 0: center, 1: up, 2: right, 3: down, 4: left
         deltas = np.array([[0, 0], [1, 0], [0, 1], [-1, 0], [0, -1]])
@@ -207,9 +216,6 @@ class LuxController(Controller):
         for player in obs.players.keys():
             for factory_id, factory in obs.factories[player].items():
                 row,col = factory.pos
-                power = factory.power
-                metal = factory.cargo.metal
-                strain = factory.strain_id
 
                 factories_map[ # Factories are always 3x3 so no need to check out-of-bounds
                     0,
@@ -219,27 +225,22 @@ class LuxController(Controller):
 
                 if agent == player:
                     if factory.can_build_light():
-                        build_light_mask[0, row, col] = True
+                        action_masks['build_light'][row, col] = True
                     if factory.can_build_heavy():
-                        build_heavy_mask[0, row, col] = True
+                        action_masks['build_heavy'][row, col] = True
 
-                    # Allow transfer to ally factory tiles
-                    # for i, (drow, dcol) in enumerate(deltas):
-                    #     transfer_mask[
-                    #         i,
-                    #         max(0, row - 1 + drow): min(row + 2 + drow, MAP_SIZE),
-                    #         max(0, col - 1 + dcol): min(col + 2 + dcol, MAP_SIZE),
-                    #     ] = True
-
-                    ally_lichen_strains[strain] = 1
+                    for strain in player.factory_strains:
+                        lichen_allegiance = lichen_allegiance()
 
                 else:
+                    # Masks moving from (rol,col) position to illegal position
                     for i, (drow, dcol) in enumerate(deltas):
-                        move_mask[
-                            i,
+                        action_masks[f'move_{self.directions.keys()[i]}'][
                             max(0, row - 1 + drow): min(row + 2 + drow, MAP_SIZE),
                             max(0, col - 1 + dcol): min(col + 2 + dcol, MAP_SIZE),
                         ] = False
+
+
 
         # coords = np.argwhere(factories_map == 1)
         # pickup_mask.ravel()[np.ravel_multi_index(coords.T, pickup_mask.shape)] = True
@@ -250,7 +251,7 @@ class LuxController(Controller):
         )
 
         _, index = np.unique(obs.board.lichen_strains, return_inverse=True)
-        ally_lichen_map = ally_lichen_strains[index].reshape((1, *map_shape))
+        ally_lichen_map = ally_lichen_strains[index].reshape(map_shape)
 
         board_sum = obs.board.board_sum
 
@@ -283,23 +284,6 @@ class LuxController(Controller):
                         row,
                         col
                     ] = False
-
-
-            # for power_perc in range(int(power / power_cap * recharge_mask.shape[0]), recharge_mask.shape[0]):
-            #     recharge_mask[
-            #         0,
-            #         row,
-            #         col
-            #     ] = False
-
-            # # direction (0 = center, 1 = up, 2 = right, 3 = down, 4 = left)
-            # deltas = np.array([[0, 0], [0, -1], [1, 0], [0, 1], [-1, 0]])
-            # for i, (drow,dcol) in enumerate(deltas):
-            #     transfer_mask[ # WIP: looking for adjacent ally robots
-            #         0,
-            #         row + drow,
-            #         col + dcol
-            #     ] = True
 
         action_mask = np.concatenate((
             move_mask,

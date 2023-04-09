@@ -1,22 +1,16 @@
-import copy
 import gym
 from gym import spaces
 import numpy as np
 import torch
-from typing import Dict, List, NoReturn, Optional, Tuple, Union, Any
+from typing import Dict, List, Optional, Tuple, Union, Any
 import numpy.typing as npt
 import itertools
 
-from ..lux.config import EnvConfig
-from typing import Callable
 from luxai_s2.env import LuxAI_S2
-from luxai_s2.state import ObservationStateDict
-from luxai_s2.unit import ActionType, BidActionType, FactoryPlacementActionType
 from luxai_s2.utils import my_turn_to_place_factory
 from .controller import LuxController
-from lux_ai.lux_gym import agent
 from ..lux.game_state import obs_to_game_state, GameState
-from lux_ai.lux_gym.agent import Agent
+from lux_ai.rl_agent.agent import Agent
 
 #
 # # from .act_spaces import ACTION_MEANINGS
@@ -410,6 +404,7 @@ class SinglePhaseWrapper(gym.Wrapper):
     def __init__(
             self,
             env: LuxAI_S2,
+            **flags,
     ) -> None:
         """
         A environment wrapper for Stable Baselines 3. It reduces the LuxAI_S2 env
@@ -433,6 +428,7 @@ class SinglePhaseWrapper(gym.Wrapper):
         gym.Wrapper.__init__(self, env)
         self.env = env
         self.prev_obs = None
+        self.flags = flags
 
     def step(self, action: Dict[str, npt.NDArray]):
 
@@ -459,8 +455,9 @@ class SinglePhaseWrapper(gym.Wrapper):
             player_id: Agent(
                 player_id,
                 self.env.env_cfg,
-                controller=LuxController(self.env_cfg),
+                controller=LuxController(self.env_cfg, self.flags),
                 policy=None,
+                flags=self.flags,
             )
             for player_id in self.env.possible_agents
         }

@@ -1,14 +1,6 @@
-import json
-from typing import Dict
-import sys
-from argparse import Namespace
-import matplotlib.pyplot as plt
-
-from lux_ai.lux_gym.agent import Agent
+from lux_ai.rl_agent.agent import Agent
 from lux_ai.lux.config import EnvConfig
 from lux_ai.lux.game_state import obs_to_game_state#, process_action
-from lux_ai.lux_gym.obs_spaces import FixedShapeObs
-from lux_ai.lux_gym.controller import LuxController
 from lux_ai.lux_gym import wrappers
 
 from luxai_s2.env import LuxAI_S2
@@ -70,12 +62,11 @@ def animate(imgs, _return=True, fps=10, filename="__temp__.mp4"):
 
 if __name__ == "__main__":
     import numpy as np
-    from lux_ai.lux_gym.wrappers import ObservationWrapper
 
     env = LuxAI_S2(collect_stats=True, verbose=0)
     env.env_cfg = env.state.env_cfg
     env.env_steps = env.state.env_steps
-    env.agents = {player_id: Agent(player_id, env.state.env_cfg) for player_id in env.possible_agents}
+    # env.agents = {player_id: Agent(player_id, env.state.env_cfg) for player_id in env.possible_agents}
     env = wrappers.GameStateWrapper(env)
     env = wrappers.SinglePhaseWrapper(env)
     # env = wrappers.ObservationWrapper(env)

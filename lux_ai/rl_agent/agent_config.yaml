@@ -1,0 +1,16 @@
+action_spaces:
+  robot_actions:
+    - move_center # no_op
+    - move_up
+    - move_right
+    - move_down
+    - move_left
+    - transfer
+    - dig
+    - pickup
+    - self_destruct
+    - recharge
+  factory_actions:
+    - build_light
+    - build_heavy
+    - grow_lichen
