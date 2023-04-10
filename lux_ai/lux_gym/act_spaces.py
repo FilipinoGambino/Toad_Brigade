@@ -35,8 +35,8 @@ class Action(ABC):
 
 class FactoryBuildAction(Action):
     def __init__(self, unit_type: str) -> None:
-        super().__init__(f"build_{unit_type.lower()}_robot")
-        self.unit_type = unit_type
+        super().__init__(f"build_{unit_type}_robot")
+        self.unit_type = unit_type.upper()
 
     def __str__(self) -> str:
         return f"{self.act_type}"
@@ -45,9 +45,9 @@ class FactoryBuildAction(Action):
         return 0 if self.unit_type == "LIGHT" else 1
 
 
-class FactoryWaterAction(Action):
+class FactoryGrowAction(Action):
     def __init__(self) -> None:
-        super().__init__("water_lichen")
+        super().__init__("grow_lichen")
 
     def __str__(self) -> str:
         return f"{self.act_type}"
@@ -71,36 +71,36 @@ class MoveAction(Action):
         return np.array([0, self.move_dir, 0, 0, kwargs['repeat'], kwargs['n']])
 
 
-# class TransferAction(Action):
-#     def __init__(
-#         self,
-#         transfer_dir: int,
-#         resource: int,
-#         transfer_amount: int,
-#         repeat: int = 0,
-#     ) -> None:
-#         super().__init__("transfer")
-#         # a[2] = R = resource type (0 = ice, 1 = ore, 2 = water, 3 = metal, 4 power)
-#         self.transfer_dir = transfer_dir
-#         self.resource = resource
-#         self.transfer_amount = transfer_amount
-#         self.repeat = repeat
-#         self.power_cost = 0
-#
-#     def __str__(self) -> str:
-#         return f"{self.act_type} {resource_to_name[self.resource]} {direction_to_name[self.transfer_dir]} (r: {self.repeat})"
-#
-#     def __call__(self):
-#         return np.array(
-#             [
-#                 1,
-#                 self.transfer_dir,
-#                 self.resource,
-#                 self.transfer_amount,
-#                 self.repeat,
-#                 0
-#             ]
-#         )
+class TransferAction(Action):
+    def __init__(
+        self,
+        transfer_dir: int,
+        resource: int,
+        transfer_amount: int,
+        repeat: int = 0,
+    ) -> None:
+        super().__init__("transfer")
+        # a[2] = R = resource type (0 = ice, 1 = ore, 2 = water, 3 = metal, 4 power)
+        self.transfer_dir = transfer_dir
+        self.resource = resource
+        self.transfer_amount = transfer_amount
+        self.repeat = repeat
+        self.power_cost = 0
+
+    def __str__(self) -> str:
+        return f"{self.act_type} {resource_to_name[self.resource]} {direction_to_name[self.transfer_dir]} (r: {self.repeat})"
+
+    def __call__(self):
+        return np.array(
+            [
+                1,
+                self.transfer_dir,
+                self.resource,
+                self.transfer_amount,
+                self.repeat,
+                0
+            ]
+        )
 
 
 class PickupAction(Action):
@@ -434,3 +434,32 @@ class RechargeAction(Action):
 # def get_city_tile_action(city_tile: CityTile, action_idx: int) -> Optional[str]:
 #     action = ACTION_MEANINGS["city_tile"][action_idx]
 #     return ACTION_MEANING_TO_FUNC["city_tile"][action](city_tile)
+
+def action_to_func(action:str):
+    if action == "move_center":
+        return MoveAction(0)
+    elif action == "move_up":
+        return MoveAction(1)
+    elif action == "move_right":
+        return MoveAction(2)
+    elif action == "move_down":
+        return MoveAction(3)
+    elif action == "move_left":
+        return MoveAction(4)
+    elif action == "pickup":
+        return PickupAction(4) # power
+    elif action == "dig":
+        return DigAction()
+    elif action == "self_destruct":
+        return SelfDestructAction()
+    elif action == "recharge":
+        return RechargeAction()
+    elif action == "build_light":
+        return FactoryBuildAction('light')
+    elif action == "build_heavy":
+        return FactoryBuildAction('heavy')
+    elif action == "grow_lichen":
+        return FactoryGrowAction()
+    else:
+        print(f"Not implemented action {action}")
+        raise NotImplementedError

@@ -37,8 +37,8 @@ def obs_to_game_state(env_cfg: EnvConfig, obs: Dict[str, Any]):
             factories[agent][unit_id] = factory
             factory_occupancy_map[factory.pos_slice] = factory.strain_id
             power_map[factory.pos_slice] = factory.power
-    players = dict()
 
+    players = dict()
     for agent in obs["teams"]:
         team_data = obs["teams"][agent]
         # team_data['factories_count'] =
@@ -92,7 +92,7 @@ class Board:
     @property
     def board_sum(self):
         resource_maps = np.stack([self.rubble, self.ore, self.ice, self.lichen], axis=0)
-        board_sum = np.sum(resource_maps, axis=0, keepdims=True)
+        board_sum = np.sum(resource_maps, axis=0, keepdims=False)
         return board_sum
 
 

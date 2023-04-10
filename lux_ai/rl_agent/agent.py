@@ -50,8 +50,7 @@ class Agent:
             policy: Any = None,
             flags: SimpleNamespace = None,
     ) -> None:
-        with open(RL_AGENT_CONFIG_PATH, 'r') as f:
-            self.agent_flags = SimpleNamespace(**yaml.safe_load(f))
+        self.agent_flags = flags
 
         self.my_id = player
         self.opp_player = "player_1" if self.my_id == "player_0" else "player_0"
@@ -131,6 +130,8 @@ class Agent:
             # to improve performance, we have a rule based action mask generator for the controller used
             # which will force the agent to generate actions that are valid only.
             action_mask = self.controller.action_masks(self.my_id, obs)
+            # for key, mask in action_mask.items():
+            #     print([f"{key}:  {mask}"])
 
             # SB3 doesn't support invalid action masking. So we do it ourselves here
             # logits = self.policy(obs.unsqueeze(0)) # FIXME Start the policy!!!
@@ -138,14 +139,24 @@ class Agent:
             # logits[~action_mask] = -1e8  # mask out invalid actions
             # dist = torch.distributions.Categorical(logits=logits)
             # actions = dist.sample().cpu().numpy()  # shape (1, 1)
-            actions = np.random.randn(12, 48, 48)
-            actions[~action_mask] = -1e8
+            action_flag = self.flags.actions
+            map_flag = self.flags.map_shape
+
+            action_maps = {
+                action: np.random.uniform(low=0, high=1, size=map_flag)
+                for unit,actions in action_flag.items()
+                for action in actions
+            }
+            for unit,actions in action_flag.items():
+                for action in actions:
+                    mask = action_mask[action]
+                    action_maps[action][~mask] = -1e8
 
         # use our controller which we trained with in train.py to generate a Lux S2 compatible action
         lux_action = self.controller.action_to_lux_action(
             self.my_id,
             obs,
-            actions
+            action_maps
         )
 
         return lux_action

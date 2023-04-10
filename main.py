@@ -4,11 +4,17 @@ from lux_ai.lux.game_state import obs_to_game_state#, process_action
 from lux_ai.lux_gym import wrappers
 
 from luxai_s2.env import LuxAI_S2
+from lux_ai.lux_gym.controller import LuxController
+
+import yaml
+from pathlib import Path
+from types import SimpleNamespace
+
+RL_AGENT_CONFIG_PATH = Path(__file__).parent / "agent_config.yaml"
 
 ### DO NOT REMOVE THE FOLLOWING CODE ###
 agent_dict = dict()  # store potentially multiple dictionaries as kaggle imports code directly
 agent_prev_obs = dict()
-
 
 def agent_fn(observation, configurations):
     action_queue = dict()
@@ -63,12 +69,25 @@ def animate(imgs, _return=True, fps=10, filename="__temp__.mp4"):
 if __name__ == "__main__":
     import numpy as np
 
-    env = LuxAI_S2(collect_stats=True, verbose=0)
+    with open(RL_AGENT_CONFIG_PATH, 'r') as f:
+        agent_flags = SimpleNamespace(**yaml.full_load(f))
+
+    env = LuxAI_S2(collect_stats=True, verbose=4)
     env.env_cfg = env.state.env_cfg
     env.env_steps = env.state.env_steps
-    # env.agents = {player_id: Agent(player_id, env.state.env_cfg) for player_id in env.possible_agents}
+    agents = {
+            player_id: Agent(
+                player_id,
+                env.env_cfg,
+                controller=LuxController(env.env_cfg, agent_flags),
+                policy=None,
+                flags=agent_flags,
+            )
+            for player_id in env.possible_agents
+        }
+
     env = wrappers.GameStateWrapper(env)
-    env = wrappers.SinglePhaseWrapper(env)
+    env = wrappers.SinglePhaseWrapper(env, agents)
     # env = wrappers.ObservationWrapper(env)
     # env = wrappers.PytorchEnv(env)
     # TODO maybe CustromEnvWrapper fixes this?

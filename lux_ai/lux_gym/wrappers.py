@@ -404,6 +404,7 @@ class SinglePhaseWrapper(gym.Wrapper):
     def __init__(
             self,
             env: LuxAI_S2,
+            agents: Dict[str, Agent],
             **flags,
     ) -> None:
         """
@@ -426,6 +427,7 @@ class SinglePhaseWrapper(gym.Wrapper):
             See luxai_s2/wrappers/controllers.py for available controllers and how to make your own
         """
         gym.Wrapper.__init__(self, env)
+        self.agents = agents
         self.env = env
         self.prev_obs = None
         self.flags = flags
@@ -451,16 +453,7 @@ class SinglePhaseWrapper(gym.Wrapper):
         # we upgrade the reset function here
         # we call the original reset function first
         obs = self.env.reset(**kwargs)
-        self.env.agents = {
-            player_id: Agent(
-                player_id,
-                self.env.env_cfg,
-                controller=LuxController(self.env_cfg, self.flags),
-                policy=None,
-                flags=self.flags,
-            )
-            for player_id in self.env.possible_agents
-        }
+        self.env.agents = self.agents
         # print(vars(self.env.agents['player_0']))
         # then use the bid policy to go through the bidding phase
         action = dict()

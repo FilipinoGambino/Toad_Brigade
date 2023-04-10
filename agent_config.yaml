@@ -1,11 +1,11 @@
-action_spaces:
+actions:
   robot_actions:
     - move_center # no_op
     - move_up
     - move_right
     - move_down
     - move_left
-    - transfer
+#    - transfer
     - dig
     - pickup
     - self_destruct
@@ -14,3 +14,5 @@ action_spaces:
     - build_light
     - build_heavy
     - grow_lichen
+
+map_shape: !!python/tuple [48, 48]

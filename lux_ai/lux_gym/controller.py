@@ -12,33 +12,11 @@ from lux_ai.lux.game_state import GameState
 import luxai_s2.unit as luxai_unit
 from luxai_s2.unit import UnitType
 from luxai_s2.config import EnvConfig
-from ..lux_gym.act_spaces import (
-    FactoryBuildAction,
-    FactoryWaterAction,
-    MoveAction,
-    PickupAction,
-    DigAction,
-    SelfDestructAction,
-    RechargeAction,
-)
+from ..lux_gym.act_spaces import action_to_func
 
 MAP_SIZE = EnvConfig.map_size
 ROBOT_ACTIONS = 8 + 1
 ROBOTS = EnvConfig().ROBOTS
-ACTIONS = [
-    MoveAction(move_dir=0), # no-op
-    MoveAction(move_dir=1), # move up
-    MoveAction(move_dir=2), # move right
-    MoveAction(move_dir=3), # move down
-    MoveAction(move_dir=4), # move left
-    PickupAction(resource=4), # pickup power to unit's capacity
-    DigAction(),
-    SelfDestructAction(),
-    RechargeAction(), # 5 steps enough? Most of the energy should be coming from factories as recharging is too slow
-    FactoryBuildAction(str(UnitType.LIGHT)),
-    FactoryBuildAction(str(UnitType.HEAVY)),
-    FactoryWaterAction(),
-]
 
 # Controller class copied here since you won't have access to the luxai_s2 package directly on the competition server
 class Controller(ABC):
@@ -84,33 +62,59 @@ class LuxController(Controller):
         self.env_cfg = env_cfg
         self.flags = flags
 
-        self.directions = dict(center=0, up=1, right=2, down=3, left=4)
-        self.resources = dict(ice=0, ore=1, water=2, metal=3, power=4)
+        actions = self.flags.actions
+        self.robot_actions = actions['robot_actions']
+        self.factory_actions = actions['factory_actions']
 
-        self.factory_actions = len(ACTIONS) - 3
+        self.robot_action_id = {
+            idx: action_str
+            for idx,action_str in enumerate(self.robot_actions)
+        }
+        self.factory_action_id = {
+            idx: action_str
+            for idx, action_str in enumerate(self.factory_actions)
+        }
+        self.robot_funcs = {
+            action: action_to_func(action)
+            for action in self.robot_actions
+        }
+        self.factory_funcs = {
+            action: action_to_func(action)
+            for action in self.factory_actions
+        }
 
-        n_actions = len(ACTIONS)
-        map_shape = (n_actions, MAP_SIZE, MAP_SIZE)
+        n_factory_actions = len(actions['factory_actions'])
+        n_robot_actions = len(actions['robot_actions'])
+
+        n_actions = n_robot_actions + n_factory_actions
         action_space = spaces.Discrete(n_actions)
 
         super().__init__(action_space)
 
-    def action_to_lux_action(self, agent: str, obs: GameState, actions: npt.NDArray):
+    def action_to_lux_action(self, agent: str, obs: GameState, actions: Dict[str, npt.NDArray]):
         lux_action = dict()
+        action_flag = self.flags.actions
 
-        unit_actions = actions.copy()
-        factory_actions = actions.copy()
-
-        unit_actions[ROBOT_ACTIONS:] = -1e8
-        factory_actions[:ROBOT_ACTIONS] = -1e8
-
-        # print([layer for layer in factory_actions])
-        # print(f"unit actions: {np.argwhere(unit_actions > -1000)}")
-        # print(f"factory actions: {np.argwhere(factory_actions > -1000)}")
+        unit_actions = np.stack(
+            [
+                action_map.copy()
+                for action_key, action_map in actions.items()
+                if action_key in action_flag['robot_actions']
+            ],
+            axis = 0
+        )
+        factory_actions = np.stack(
+            [
+                action_map.copy()
+                for action_key, action_map in actions.items()
+                if action_key in action_flag['factory_actions']
+            ],
+            axis = 0
+        )
 
         unit_actions = unit_actions.argmax(axis=0)
         factory_actions = factory_actions.argmax(axis=0)
-        print(unit_actions, factory_actions)
+        # print(unit_actions, factory_actions)
 
         for unit_id, unit in obs.units[agent].items():
             weight_class = unit.unit_type
@@ -119,24 +123,29 @@ class LuxController(Controller):
             power_space = min(bot_cfg.BATTERY_CAPACITY - unit.power, obs.board.power[row,col])
             steps = 0
 
-            action = unit_actions[row,col]
+            action_idx = unit_actions[row,col]
+            action = self.robot_action_id[action_idx]
 
-            if action != 0: # Not no_op
-                action_queue = [
-                    ACTIONS[action](
-                        pickup_amount=power_space,
-                        repeat=1,
-                        n=steps,
-                    )
-                ]
-                if unit.action_queue:
-                    if unit.action_queue[0] != action_queue[0]: # FIXME if sequence of actions is used
-                        lux_action[unit_id] = action_queue
+            # if action != 0: # Not no_op
+            action_queue = [
+                self.robot_funcs[action](
+                    pickup_amount=power_space,
+                    repeat=0,
+                    n=steps,
+                )
+            ]
+            print(unit.unit_id, unit.power)
+            if unit.action_queue:
+                if unit.action_queue[0] != action_queue[0]: # FIXME if sequence of actions is used
+                    lux_action[unit_id] = action_queue
+            else:
+                lux_action[unit_id] = action_queue
 
         for factory_id, factory in obs.factories[agent].items():
             row, col = factory.pos
-            action = factory_actions[row, col]
-            lux_action[factory_id] = ACTIONS[action](repeat=0, n=0)
+            action_idx = factory_actions[row, col]
+            action = self.factory_action_id[action_idx]
+            lux_action[factory_id] = self.factory_funcs[action](repeat=0, n=0)
         print(lux_action)
         return lux_action
 
@@ -156,50 +165,11 @@ class LuxController(Controller):
 
         # compute a factory occupancy map that will be useful for checking if a board tile
         # has a factory and which team's factory it is.
-        action_masks = {action: np.ones(
-            map_shape, dtype=int
-        )
-            for action_space in self.flags['action_spaces'].keys()
-            for action in self.flags['action_spaces'][action_space]
+        action_masks = {
+            action: np.ones(map_shape, dtype=bool)
+            for action_space in self.flags.actions.keys()
+            for action in self.flags.actions[action_space]
         }
-
-
-        # Robot action masks
-        move_mask = np.ones(  # 0: center, 1: up, 2: right, 3: down, 4: left
-            (5, *map_shape), dtype=int
-        )
-        # transfer_mask = np.zeros( # power/ore/ice * directions (c/u/d/l/r) Maybe 5 dir layers and 3 res layers
-        #     (15, *map_shape), dtype=bool
-        # )
-        # pickup_mask = np.zeros_like(
-        #     (1, *map_shape), dtype=bool
-        # )
-        # dig_mask = np.zeros_like(
-        #     (1, *map_shape), dtype=bool
-        # )
-        self_destruct_mask = np.ones_like(
-            (1, *map_shape), dtype=bool
-        )
-        recharge_mask = np.ones_like(
-            (1, *map_shape), dtype=bool
-        )
-
-        # Factory action masks
-        build_light_mask = np.zeros(
-            (1, *map_shape), dtype=int
-        )
-        build_heavy_mask = np.zeros(
-            (1, *map_shape), dtype=int
-        )
-        grow_lichen_mask = np.ones( # Always true
-            (1, *map_shape), dtype=int
-        )
-
-
-        factories_map = np.zeros(
-            (1, *map_shape), dtype=int
-        )
-
 
         # Out of bounds
         action_masks['move_up'][0, :] = False
@@ -207,65 +177,83 @@ class LuxController(Controller):
         action_masks['move_down'][-1, :] = False
         action_masks['move_left'][:, 0] = False
 
-        ally_lichen_strains = {player.agent: player.factory_strains for player in obs.players}
-        lichen_allegiance = np.zeros(map_shape)
+        ally_lichen_strains = {player.agent: player.factory_strains for player in obs.players.values()}
+        lichen_allegiance_map = np.full(map_shape, dtype=int, fill_value=-1)
+        factories_map = np.full(map_shape, dtype=int, fill_value=-1)
 
+        # 0: enemy, 1: ally, -1: N/A
+        enemy = 0
+        ally = 1
+        na = -1
+        allegiance = [0, 1, -1]
         # 0: center, 1: up, 2: right, 3: down, 4: left
-        deltas = np.array([[0, 0], [1, 0], [0, 1], [-1, 0], [0, -1]])
+        move_directions = dict(
+            center=np.array([0, 0]),
+            up=np.array([1, 0]),
+            right=np.array([0, 1]),
+            down=np.array([-1, 0]),
+            left=np.array([0, -1])
+        )
 
-        for player in obs.players.keys():
-            for factory_id, factory in obs.factories[player].items():
+        action_masks['build_light'][:] = False
+        action_masks['build_heavy'][:] = False
+
+        for player_id in obs.players.keys():
+            for factory_id, factory in obs.factories[player_id].items():
                 row,col = factory.pos
+                strain_id = factory.strain_id
 
                 factories_map[ # Factories are always 3x3 so no need to check out-of-bounds
-                    0,
-                    row - 1: row + 2,
-                    col - 1: col + 2,
-                ] = (agent != player) + 1  # 0: no factory, 1: ally factory, 2: enemy factory
+                    factory.pos_slice
+                ] = allegiance[agent == player_id]
 
-                if agent == player:
+                lichen_allegiance_coords = np.argwhere(
+                    obs.board.lichen_strains == strain_id,
+                )
+                lichen_allegiance_map[lichen_allegiance_coords] = allegiance[agent == player_id]
+
+                if agent == player_id:
                     if factory.can_build_light():
                         action_masks['build_light'][row, col] = True
                     if factory.can_build_heavy():
                         action_masks['build_heavy'][row, col] = True
 
-                    for strain in player.factory_strains:
-                        lichen_allegiance = lichen_allegiance()
+                    # Don't move to the center tile of a factory
+                    for direction, (drow, dcol) in move_directions.items():
+                        action_masks[f'move_{direction}'][
+                            row - drow,
+                            col - dcol,
+                        ] = False
 
                 else:
-                    # Masks moving from (rol,col) position to illegal position
-                    for i, (drow, dcol) in enumerate(deltas):
-                        action_masks[f'move_{self.directions.keys()[i]}'][
+                    # Masks moving from (row,col) position to illegal position
+                    for direction,(drow,dcol) in move_directions.items():
+                        action_masks[f'move_{direction}'][
                             max(0, row - 1 + drow): min(row + 2 + drow, MAP_SIZE),
                             max(0, col - 1 + dcol): min(col + 2 + dcol, MAP_SIZE),
                         ] = False
 
+        # pickup action legal only on ally factory tiles
+        action_masks['pickup'] = np.where(factories_map == allegiance[ally], True, False)
 
-
-        # coords = np.argwhere(factories_map == 1)
-        # pickup_mask.ravel()[np.ravel_multi_index(coords.T, pickup_mask.shape)] = True
-        pickup_mask = np.where(
-            factories_map == 1,
-            1,
-            0
-        )
-
-        _, index = np.unique(obs.board.lichen_strains, return_inverse=True)
-        ally_lichen_map = ally_lichen_strains[index].reshape(map_shape)
+        # _, index = np.unique(obs.board.lichen_strains, return_inverse=True)
+        # print(lichen_allegiance_map[index].reshape(map_shape))
+        # ally_lichen_map = lichen_allegiance_map[index].reshape(map_shape)
 
         board_sum = obs.board.board_sum
 
-        dig_mask = np.where(
-            (factories_map == 0) # Not on factory tile
+        action_masks['dig'] = np.where(
+            (factories_map == allegiance[na]) # Not on factory tile
             & (board_sum > 0) # Is on resource tile
-            & (ally_lichen_map == 0), # Not on ally lichen tile
-            1,
-            0
+            & (lichen_allegiance_map != allegiance[ally]), # Not on ally lichen tile
+            True,
+            False
         )
-        self_destruct_mask = np.where(
+
+        action_masks['self_destruct'] = np.where(
             factories_map != 1,
-            1,
-            0
+            True,
+            False
         )
 
         for unit_id, unit in obs.units[agent].items():
@@ -275,26 +263,10 @@ class LuxController(Controller):
             # shouldn't be blowing up, so we can keep this as a single action/mask instead of seperate
             # light and HEAVY actions/masks
             if unit.power < unit.self_destruct_cost():
-                self_destruct_mask[0, row, col] = False
+                action_masks['self_destruct'][row, col] = False
 
-            for idx,_ in enumerate(deltas):
-                if unit.power < unit.move_cost(obs, idx):
-                    move_mask[
-                        idx,
-                        row,
-                        col
-                    ] = False
+            for direction in move_directions.keys():
+                if unit.power < unit.move_cost(obs, direction):
+                    action_masks['move'][row, col] = False
 
-        action_mask = np.concatenate((
-            move_mask,
-            # transfer_mask,
-            dig_mask,
-            pickup_mask,
-            self_destruct_mask,
-            recharge_mask,
-            build_light_mask,
-            build_heavy_mask,
-            grow_lichen_mask,
-        ), axis=0, dtype=int)
-
-        return action_mask
+        return action_masks

@@ -7,13 +7,12 @@ from .cargo import UnitCargo
 from .config import EnvConfig, UnitConfig
 
 # a[1] = direction (0 = center, 1 = up, 2 = right, 3 = down, 4 = left)
-move_deltas = np.array([[0, 0], [0, -1], [1, 0], [0, 1], [-1, 0]])
 directions = dict(
-    center = 0,
-    up = 1,
-    right = 2,
-    down = 3,
-    left = 4,
+    center=np.array([0, 0]),
+    up=np.array([1, 0]),
+    right=np.array([0, 1]),
+    down=np.array([-1, 0]),
+    left=np.array([0, -1])
 )
 resources = dict(
     ice = 0,
@@ -53,21 +52,21 @@ class Robot:
 
     def move_cost(self, game_state, direction):
         board = game_state.board
-        target_pos = self.pos + move_deltas[direction]
+        target_pos = self.pos + directions[direction]
         if target_pos[0] < 0 or target_pos[1] < 0 or target_pos[1] >= len(board.rubble) or target_pos[0] >= len(
                 board.rubble[0]):
             # print("Warning, tried to get move cost for going off the map", file=sys.stderr)
             return None
         factory_there = board.factory_occupancy_map[target_pos[0], target_pos[1]]
-        if factory_there not in game_state.teams[self.agent_id].factory_strains and factory_there != -1:
-            # print("Warning, tried to get move cost for going onto a opposition factory", file=sys.stderr)
+        if factory_there not in game_state.players[self.agent_id].factory_strains and factory_there != -1:
+            # print("Warning, tried to get move cost for going onto an opposition factory", file=sys.stderr)
             return None
         rubble_at_target = board.rubble[target_pos[0]][target_pos[1]]
 
         return math.floor(self.unit_cfg.MOVE_COST + self.unit_cfg.RUBBLE_MOVEMENT_COST * rubble_at_target)
 
     def move(self, direction, repeat=0, n=1):
-        assert direction in directions.values(), f"{direction} not in {directions}"
+        assert direction in directions.keys(), f"{direction} not in {directions}"
         return np.array([0, direction, 0, 0, repeat, n])
 
     def transfer(self, transfer_direction, transfer_resource, transfer_amount, repeat=0, n=1):
