@@ -8,11 +8,24 @@ from .robot import Robot
 from .factory import Factory
 
 def obs_to_game_state(env_cfg: EnvConfig, obs: Dict[str, Any]):
+    allegiance_map = np.full_like(obs['board']['rubble'], fill_value=-1)
+    robot_map = np.zeros_like(obs['board']['rubble'])
+    robot_weight_map = np.zeros_like(obs['board']['rubble'])
+    power_light_map = np.zeros_like(obs["board"]["rubble"], dtype=int)
+    power_heavy_map = np.zeros_like(obs["board"]["rubble"], dtype=int)
+    cargo_light_full = np.zeros_like(obs["board"]["rubble"], dtype=int)
+    cargo_heavy_full = np.zeros_like(obs["board"]["rubble"], dtype=int)
+    cargo_light_ice = np.zeros_like(obs["board"]["rubble"], dtype=int)
+    cargo_light_ore = np.zeros_like(obs["board"]["rubble"], dtype=int)
+    cargo_heavy_ice = np.zeros_like(obs["board"]["rubble"], dtype=int)
+    cargo_heavy_ore = np.zeros_like(obs["board"]["rubble"], dtype=int)
+
     units = dict()
     for agent in obs["units"]:
         units[agent] = dict()
         for unit_id in obs["units"][agent]:
             unit_data = obs["units"][agent][unit_id]
+            unit_data['pos'] = np.flip(unit_data['pos'])
             unit = Robot(
                 **unit_data,
                 unit_cfg=env_cfg.ROBOTS[unit_data["unit_type"]],
@@ -21,29 +34,76 @@ def obs_to_game_state(env_cfg: EnvConfig, obs: Dict[str, Any]):
             )
             unit.cargo = UnitCargo(**unit_data["cargo"])
             units[agent][unit_id] = unit
+            row,col = unit.pos
+            robot_map[row, col] += 1
+            allegiance_map[row, col] = unit.team_id
+            if unit_data['unit_type'] == 'LIGHT':
+                robot_weight_map[row, col] = 1
+                power_light_map[row, col] = unit.power
+                cargo_light_full[row, col] = unit.is_full
+                cargo_light_ice[row, col] = unit.cargo.ice
+                cargo_light_ore[row, col] = unit.cargo.ore
+            else:
+                robot_weight_map[row, col] = 2
+                power_heavy_map[row, col] = unit.power
+                cargo_heavy_full[row, col] = unit.is_full
+                cargo_heavy_ice[row, col] = unit.cargo.ice
+                cargo_heavy_ore[row, col] = unit.cargo.ore
 
-    factory_occupancy_map = np.full_like(obs["board"]["rubble"], fill_value=-1, dtype=int)
-    power_map = np.zeros_like(obs["board"]["rubble"], dtype=int)
+    factory_lichen_count = dict()
+    factory_strains = np.full_like(obs["board"]["rubble"], fill_value=-1, dtype=int)
+    power_factory_map = np.zeros_like(obs["board"]["rubble"], dtype=int)
+    cargo_factory_ice = np.zeros_like(obs["board"]["rubble"], dtype=int)
+    cargo_factory_ore = np.zeros_like(obs["board"]["rubble"], dtype=int)
+    cargo_factory_water = np.zeros_like(obs["board"]["rubble"], dtype=int)
+    cargo_factory_metal = np.zeros_like(obs["board"]["rubble"], dtype=int)
+
     factories = dict()
     for agent in obs["factories"]:
         factories[agent] = dict()
         for unit_id in obs["factories"][agent]:
             f_data = obs["factories"][agent][unit_id]
+            f_data['pos'] = np.flip(f_data['pos'])
+            strain_id = f_data['strain_id']
+
+            factory_lichen_count[strain_id] = np.sum(
+                obs['board']['lichen'],
+                where=obs['board']['lichen_strains'] == strain_id
+            )
+
             factory = Factory(
                 **f_data,
-                env_cfg=env_cfg
+                env_cfg=env_cfg,
+                lichen_count = factory_lichen_count[strain_id]
             )
             factory.cargo = UnitCargo(**f_data["cargo"])
             factories[agent][unit_id] = factory
-            factory_occupancy_map[factory.pos_slice] = factory.strain_id
-            power_map[factory.pos_slice] = factory.power
+            factory_strains[factory.pos_slice] = factory.strain_id
+            power_factory_map[factory.pos_slice] = factory.power
+            cargo_factory_ice[factory.pos_slice] = factory.cargo.ice
+            cargo_factory_ore[factory.pos_slice] = factory.cargo.ore
+            cargo_factory_water[factory.pos_slice] = factory.cargo.water
+            cargo_factory_metal[factory.pos_slice] = factory.cargo.metal
+            allegiance_map[factory.pos_slice] = factory.team_id
 
     players = dict()
     for agent in obs["teams"]:
         team_data = obs["teams"][agent]
         # team_data['factories_count'] =
         # faction = FactionTypes[team_data["faction"]]
-        players[agent] = Player(**team_data, agent=agent)
+        team_lichen_count = sum(
+            [
+                lichen_count
+                for strain_id, lichen_count in factory_lichen_count.items()
+                if strain_id in team_data['factory_strains']
+            ]
+        )
+
+        players[agent] = Player(
+            **team_data,
+            agent=agent,
+            lichen_count=team_lichen_count
+        )
 
     lichen_spreading = np.logical_and(
         env_cfg.MIN_LICHEN_TO_SPREAD <= obs["board"]["lichen"],
@@ -61,15 +121,29 @@ def obs_to_game_state(env_cfg: EnvConfig, obs: Dict[str, Any]):
             lichen=obs["board"]["lichen"],
             lichen_strains=obs["board"]["lichen_strains"],
             lichen_spreading=lichen_spreading,
-            power=power_map,
-            factory_occupancy_map=factory_occupancy_map,
-            factories_per_team=obs["board"]["factories_per_team"],
-            lichen_per_team=0,
+            power_light=power_light_map,
+            power_heavy=power_heavy_map,
+            power_factory=power_factory_map,
+            robots=robot_map,
+            robot_weight=robot_weight_map,
+            factory_strains=factory_strains,
+            allegiance=allegiance_map,
+            cargo_light_full=cargo_light_full,
+            cargo_heavy_full=cargo_heavy_full,
+            cargo_light_ice=cargo_light_ice,
+            cargo_light_ore=cargo_light_ore,
+            cargo_heavy_ice=cargo_heavy_ice,
+            cargo_heavy_ore=cargo_heavy_ore,
+            cargo_factory_ice=cargo_factory_ice,
+            cargo_factory_ore=cargo_factory_ore,
+            cargo_factory_water=cargo_factory_water,
+            cargo_factory_metal=cargo_factory_metal,
             valid_spawns_mask=obs["board"]["valid_spawns_mask"]
         ),
         units=units,
         factories=factories,
         players=players,
+        factories_per_team=obs["board"]["factories_per_team"],
     )
 
     return game_state
@@ -77,16 +151,35 @@ def obs_to_game_state(env_cfg: EnvConfig, obs: Dict[str, Any]):
 
 @dataclass
 class Board:
+    # Resources
     rubble: np.ndarray
     ice: np.ndarray
     ore: np.ndarray
+    # Lichen info
     lichen: np.ndarray
     lichen_strains: np.ndarray
     lichen_spreading: np.ndarray
-    power: np.ndarray
-    factory_occupancy_map: np.ndarray
-    factories_per_team: int
-    lichen_per_team: int
+    # Robot + Factory info
+    allegiance: np.ndarray
+    # Factory info
+    power_factory: np.ndarray
+    factory_strains: np.ndarray
+    cargo_factory_ice: np.ndarray
+    cargo_factory_ore: np.ndarray
+    cargo_factory_water: np.ndarray
+    cargo_factory_metal: np.ndarray
+    # Robot info
+    power_light: np.ndarray
+    power_heavy: np.ndarray
+    robots: np.ndarray
+    robot_weight: np.ndarray
+    cargo_light_full: np.ndarray
+    cargo_heavy_full: np.ndarray
+    cargo_light_ice: np.ndarray
+    cargo_light_ore: np.ndarray
+    cargo_heavy_ice: np.ndarray
+    cargo_heavy_ore: np.ndarray
+    # Masks
     valid_spawns_mask: np.ndarray
 
     @property
@@ -107,6 +200,7 @@ class GameState:
     units: Dict[str, Dict[str, Robot]] = field(default_factory=dict)
     factories: Dict[str, Dict[str, Factory]] = field(default_factory=dict)
     players: Dict[str, Player] = field(default_factory=dict)
+    factories_per_team: np.ndarray = np.array([0,0])
 
     # @property
     # def real_env_steps(self):

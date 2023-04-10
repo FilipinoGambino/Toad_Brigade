@@ -68,6 +68,13 @@ def animate(imgs, _return=True, fps=10, filename="__temp__.mp4"):
 
 if __name__ == "__main__":
     import numpy as np
+    import pandas as pd
+    import sys
+
+    pd.set_option('display.width', 400)
+    pd.set_option('display.max_columns', 10)
+    np.set_printoptions(linewidth=sys.maxsize)
+    np.set_printoptions(threshold=sys.maxsize)
 
     with open(RL_AGENT_CONFIG_PATH, 'r') as f:
         agent_flags = SimpleNamespace(**yaml.full_load(f))

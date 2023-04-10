@@ -13,6 +13,7 @@ class Factory:
     power: int
     cargo: UnitCargo
     pos: np.ndarray
+    lichen_count: int
     # lichen tiles connected to this factory
     # lichen_tiles: np.ndarray
     env_cfg: EnvConfig

@@ -1,5 +1,5 @@
 import sys
-from typing import Any, Dict
+from typing import Any, Dict#, NoneType
 
 import numpy as np
 import numpy.typing as npt
@@ -114,39 +114,40 @@ class LuxController(Controller):
 
         unit_actions = unit_actions.argmax(axis=0)
         factory_actions = factory_actions.argmax(axis=0)
-        # print(unit_actions, factory_actions)
+        # print(unit_actions, '\n',factory_actions)
 
         for unit_id, unit in obs.units[agent].items():
             weight_class = unit.unit_type
             bot_cfg = ROBOTS[weight_class]
             row,col = unit.pos
-            power_space = min(bot_cfg.BATTERY_CAPACITY - unit.power, obs.board.power[row,col])
-            steps = 0
+            if unit.unit_type == 'LIGHT':
+                power_space = min(bot_cfg.BATTERY_CAPACITY - unit.power, obs.board.power_light[row,col])
+            else:
+                power_space = min(bot_cfg.BATTERY_CAPACITY - unit.power, obs.board.power_heavy[row,col])
 
             action_idx = unit_actions[row,col]
             action = self.robot_action_id[action_idx]
 
-            # if action != 0: # Not no_op
-            action_queue = [
-                self.robot_funcs[action](
-                    pickup_amount=power_space,
-                    repeat=0,
-                    n=steps,
-                )
-            ]
-            print(unit.unit_id, unit.power)
-            if unit.action_queue:
-                if unit.action_queue[0] != action_queue[0]: # FIXME if sequence of actions is used
+            if action_idx != 0: # Not no_op
+                action_queue = [
+                    self.robot_funcs[action](
+                        pickup_amount=power_space,
+                        repeat=0,
+                        n=1,
+                    )
+                ]
+                if unit.action_queue:
+                    if np.all(unit.action_queue[0] != action_queue[0]):
+                        lux_action[unit_id] = action_queue
+                else:
                     lux_action[unit_id] = action_queue
-            else:
-                lux_action[unit_id] = action_queue
 
         for factory_id, factory in obs.factories[agent].items():
             row, col = factory.pos
             action_idx = factory_actions[row, col]
             action = self.factory_action_id[action_idx]
-            lux_action[factory_id] = self.factory_funcs[action](repeat=0, n=0)
-        print(lux_action)
+            lux_action[factory_id] = self.factory_funcs[action](repeat=0, n=1)
+
         return lux_action
 
     def action_masks(self, agent: str, obs: GameState):
@@ -189,14 +190,15 @@ class LuxController(Controller):
         # 0: center, 1: up, 2: right, 3: down, 4: left
         move_directions = dict(
             center=np.array([0, 0]),
-            up=np.array([1, 0]),
+            up=np.array([-1, 0]),
             right=np.array([0, 1]),
-            down=np.array([-1, 0]),
+            down=np.array([1, 0]),
             left=np.array([0, -1])
         )
 
         action_masks['build_light'][:] = False
         action_masks['build_heavy'][:] = False
+        action_masks['grow_lichen'][:] = False
 
         for player_id in obs.players.keys():
             for factory_id, factory in obs.factories[player_id].items():
@@ -217,20 +219,24 @@ class LuxController(Controller):
                         action_masks['build_light'][row, col] = True
                     if factory.can_build_heavy():
                         action_masks['build_heavy'][row, col] = True
+                    if factory.can_water_lichen(obs):
+                        action_masks['grow_lichen'][row, col] = True
 
                     # Don't move to the center tile of a factory
                     for direction, (drow, dcol) in move_directions.items():
+                        clip_row = max(0, min(row - drow, MAP_SIZE))
+                        clip_col = max(0, min(col - dcol, MAP_SIZE))
                         action_masks[f'move_{direction}'][
-                            row - drow,
-                            col - dcol,
+                            clip_row,
+                            clip_col,
                         ] = False
 
                 else:
                     # Masks moving from (row,col) position to illegal position
                     for direction,(drow,dcol) in move_directions.items():
                         action_masks[f'move_{direction}'][
-                            max(0, row - 1 + drow): min(row + 2 + drow, MAP_SIZE),
-                            max(0, col - 1 + dcol): min(col + 2 + dcol, MAP_SIZE),
+                            max(0, row - 1 - drow): min(row + 2 - drow, MAP_SIZE),
+                            max(0, col - 1 - dcol): min(col + 2 - dcol, MAP_SIZE),
                         ] = False
 
         # pickup action legal only on ally factory tiles
@@ -258,15 +264,35 @@ class LuxController(Controller):
 
         for unit_id, unit in obs.units[agent].items():
             row,col = unit.pos
+            if unit.power < unit.action_queue_cost() * 2:
+                for robot_action in self.robot_actions:
+                    if robot_action == 'pickup' and unit.on_factory_tile(obs):
+                        for _,factory in obs.factories[agent].items():
+                            if factory.strain_id == obs.board.factory_occupancy_map[row,col]:
+                                action_masks[robot_action][row, col] = True
+                                break
+                        continue
+                    if robot_action == 'recharge':
+                        action_masks[robot_action][row, col] = True
+                        continue
+                    action_masks[robot_action][row, col] = False
 
             # Robots can only be on top of one another on allied city tiles where they also
             # shouldn't be blowing up, so we can keep this as a single action/mask instead of seperate
             # light and HEAVY actions/masks
             if unit.power < unit.self_destruct_cost():
                 action_masks['self_destruct'][row, col] = False
+            if unit.power < unit.dig_cost(obs):
+                action_masks['dig'][row, col] = False
 
             for direction in move_directions.keys():
-                if unit.power < unit.move_cost(obs, direction):
-                    action_masks['move'][row, col] = False
+                if action_masks[f'move_{direction}'][row,col]:
+                    if unit.power < unit.move_cost(obs, direction):
+                        action_masks[f'move_{direction}'][row, col] = False
+
+            # for direction in move_directions.keys():
+            #     print(direction)
+            #     print(action_masks[f'move_{direction}'].astype(int))
+            # return
 
         return action_masks

@@ -150,7 +150,7 @@ class RechargeAction(Action):
         return f"{self.act_type} {self.repeat}"
 
     def __call__(self, **kwargs):
-        return np.array([5, 0, 0, 0, kwargs['repeat'], kwargs['n']])
+        return np.array([5, 0, 0, 0, kwargs['repeat'], 10])#kwargs['n']])
 
 
 # class BaseActSpace(ABC):

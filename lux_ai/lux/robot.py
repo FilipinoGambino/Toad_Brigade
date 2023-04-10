@@ -9,9 +9,9 @@ from .config import EnvConfig, UnitConfig
 # a[1] = direction (0 = center, 1 = up, 2 = right, 3 = down, 4 = left)
 directions = dict(
     center=np.array([0, 0]),
-    up=np.array([1, 0]),
+    up=np.array([-1, 0]),
     right=np.array([0, 1]),
-    down=np.array([-1, 0]),
+    down=np.array([1, 0]),
     left=np.array([0, -1])
 )
 resources = dict(
@@ -46,21 +46,29 @@ class Robot:
         space = self.env_cfg.ROBOTS[self.unit_type].CARGO_SPACE
         return bool(self.cargo.sum_cargo == space)
 
-    def action_queue_cost(self, game_state):
+    def on_factory_tile(self, gamestate):
+        row, col = self.pos
+        if gamestate.board.factory_occupancy_map[row, col] != -1:
+            return True
+        return False
+
+    def action_queue_cost(self):
         cost = self.env_cfg.ROBOTS[self.unit_type].ACTION_QUEUE_POWER_COST
         return cost
 
     def move_cost(self, game_state, direction):
         board = game_state.board
         target_pos = self.pos + directions[direction]
-        if target_pos[0] < 0 or target_pos[1] < 0 or target_pos[1] >= len(board.rubble) or target_pos[0] >= len(
-                board.rubble[0]):
-            # print("Warning, tried to get move cost for going off the map", file=sys.stderr)
-            return None
-        factory_there = board.factory_occupancy_map[target_pos[0], target_pos[1]]
+        if target_pos[0] < 0 \
+                or target_pos[1] < 0 \
+                or target_pos[1] >= len(board.rubble) \
+                or target_pos[0] >= len(board.rubble[0]):
+            print(f"Warning, tried to get move cost for going off the map {target_pos}")
+            return np.Inf
+        factory_there = board.factory_strains[target_pos[0], target_pos[1]]
         if factory_there not in game_state.players[self.agent_id].factory_strains and factory_there != -1:
-            # print("Warning, tried to get move cost for going onto an opposition factory", file=sys.stderr)
-            return None
+            print("Warning, tried to get move cost for going onto an opposition factory")
+            return np.Inf
         rubble_at_target = board.rubble[target_pos[0]][target_pos[1]]
 
         return math.floor(self.unit_cfg.MOVE_COST + self.unit_cfg.RUBBLE_MOVEMENT_COST * rubble_at_target)

@@ -1,6 +1,7 @@
 from typing import Dict, Optional, Tuple
 import torch
 from torch import nn
+import torch.nn.functional as F
 import gym
 import numpy as np
 

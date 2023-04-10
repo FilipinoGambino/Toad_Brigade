@@ -10,7 +10,7 @@ import os.path as osp
 import sys
 import numpy as np
 import torch
-from typing import Any
+from typing import Any, Dict
 from pathlib import Path
 from types import SimpleNamespace
 import yaml
@@ -53,7 +53,7 @@ class Agent:
         self.agent_flags = flags
 
         self.my_id = player
-        self.opp_player = "player_1" if self.my_id == "player_0" else "player_0"
+        self.opp_id = "player_1" if self.my_id == "player_0" else "player_0"
         np.random.seed(42)
         self.env_cfg: EnvConfig = env_cfg
         self.factories_to_place = self.env_cfg.MAX_FACTORIES
@@ -130,8 +130,6 @@ class Agent:
             # to improve performance, we have a rule based action mask generator for the controller used
             # which will force the agent to generate actions that are valid only.
             action_mask = self.controller.action_masks(self.my_id, obs)
-            # for key, mask in action_mask.items():
-            #     print([f"{key}:  {mask}"])
 
             # SB3 doesn't support invalid action masking. So we do it ourselves here
             # logits = self.policy(obs.unsqueeze(0)) # FIXME Start the policy!!!
@@ -147,7 +145,7 @@ class Agent:
                 for unit,actions in action_flag.items()
                 for action in actions
             }
-            for unit,actions in action_flag.items():
+            for actions in action_flag.values():
                 for action in actions:
                     mask = action_mask[action]
                     action_maps[action][~mask] = -1e8
@@ -160,6 +158,50 @@ class Agent:
         )
 
         return lux_action
+
+    def preprocess(self, obs: GameState) -> Dict[str, torch.tensor]:
+        tensors = {
+            'maps': dict(
+                ice=obs.board.ice, # Boolean
+                ore=obs.board.ore, # Boolean
+                robots=obs.board.robots,  # Boolean
+                lichen_spreading=obs.board.lichen_spreading,  # Boolean
+                cargo_light_full=obs.board.cargo_light_full,  # Boolean
+                cargo_heavy_full=obs.board.cargo_heavy_full,  # Boolean
+                robot_weight=obs.board.robot_weight,  # Discrete
+                lichen_strains=obs.board.lichen_strains, # Discrete
+                allegiance=obs.board.allegiance, # Discrete
+                factory_strains=obs.board.factory_strains, # Discrete - Max factories * 2
+
+                lichen=obs.board.lichen // self.env_cfg.MAX_LICHEN_PER_TILE,  # Cont
+                power_factory=obs.board.power_factory,  # Cont
+                rubble=obs.board.rubble // self.env_cfg.MAX_RUBBLE,  # Cont
+                cargo_factory_ice=obs.board.cargo_factory_ice, # Cont - inf
+                cargo_factory_ore=obs.board.cargo_factory_ore, # Cont - inf
+                cargo_factory_water=obs.board.cargo_factory_water, # Cont - inf
+                cargo_factory_metal=obs.board.cargo_factory_metal, # Cont - inf
+                power_light=obs.board.power_light // self.env_cfg.ROBOTS['LIGHT'].BATTERY_CAPACITY, # Cont
+                power_heavy=obs.board.power_heavy // self.env_cfg.ROBOTS['HEAVY'].BATTERY_CAPACITY, # Cont
+                cargo_light_ice=obs.board.cargo_light_ice // self.env_cfg.ROBOTS['LIGHT'].CARGO_SPACE, # Cont
+                cargo_light_ore=obs.board.cargo_light_ore // self.env_cfg.ROBOTS['LIGHT'].CARGO_SPACE, # Cont
+                cargo_heavy_ice=obs.board.cargo_heavy_ice // self.env_cfg.ROBOTS['HEAVY'].CARGO_SPACE, # Cont
+                cargo_heavy_ore=obs.board.cargo_heavy_ore // self.env_cfg.ROBOTS['HEAVY'].CARGO_SPACE, # Cont
+        ),
+            'globals': dict(
+                my_lichen=obs.players[self.my_id].lichen_count, # Boolean
+                opp_lichen=obs.players[self.opp_id].lichen_count, # Boolean
+                env_steps=obs.real_env_steps, # Cont
+                game_phase=obs.game_phase(), # Discrete
+                cycle_step=obs.cycle_step(), # Discrete
+                is_day=obs.is_day(), # Boolean
+            )
+        }
+        for key in tensors['maps'].keys():
+            tensors[key] = torch.from_numpy(tensors[key])
+
+        return tensors
+
+
 
     @property
     def unwrapped_env(self):# -> LuxEnv:
