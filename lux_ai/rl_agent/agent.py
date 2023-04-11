@@ -79,7 +79,6 @@ class Agent:
         # directory = osp.dirname(__file__)
         # self.policy = PPO.load(osp.join(directory, MODEL_WEIGHTS_RELATIVE_PATH))
 
-        # self.controller = SimpleUnitDiscreteController(self.env_cfg)
 
     def bid_policy(self, obs, remainingOverageTime: int = 60):
         # the policy here is the same one used in the RL tutorial: https://www.kaggle.com/code/stonet2000/rl-with-lux-2-rl-problem-solving
