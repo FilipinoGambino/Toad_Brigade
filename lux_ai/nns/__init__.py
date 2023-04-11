@@ -9,7 +9,7 @@ from .attn_blocks import ViTBlock, RPSA, GPSA
 from .conv_blocks import ResidualBlock, ParallelDilationResidualBlock
 from .unet import UNET
 from ..lux_gym import create_flexible_obs_space, obs_spaces
-from ..utility_constants import MAX_BOARD_SIZE
+from ..utility_constants import MAP_SIZE
 
 
 def create_model(
@@ -58,8 +58,8 @@ def _create_model(
             *[ResidualBlock(
                 in_channels=flags.hidden_dim,
                 out_channels=flags.hidden_dim,
-                height=MAX_BOARD_SIZE[0],
-                width=MAX_BOARD_SIZE[1],
+                height=MAP_SIZE[0],
+                width=MAP_SIZE[1],
                 kernel_size=flags.kernel_size,
                 normalize=flags.normalize,
                 activation=nn.LeakyReLU,
@@ -73,8 +73,8 @@ def _create_model(
             *[ParallelDilationResidualBlock(
                 in_channels=flags.hidden_dim,
                 out_channels=flags.hidden_dim,
-                height=MAX_BOARD_SIZE[0],
-                width=MAX_BOARD_SIZE[1],
+                height=MAP_SIZE[0],
+                width=MAP_SIZE[1],
                 kernel_size=flags.kernel_size,
                 normalize=flags.normalize,
                 activation=nn.LeakyReLU,
@@ -87,8 +87,8 @@ def _create_model(
             UNET(
                 n_blocks_per_reduction=flags.n_blocks_per_reduction,
                 in_out_channels=flags.hidden_dim,
-                height=MAX_BOARD_SIZE[0],
-                width=MAX_BOARD_SIZE[1],
+                height=MAP_SIZE[0],
+                width=MAP_SIZE[1],
                 # Residual block kwargs
                 kernel_size=flags.kernel_size,
                 normalize=flags.normalize,
@@ -102,13 +102,13 @@ def _create_model(
             *[ViTBlock(
                 in_channels=flags.hidden_dim,
                 out_channels=flags.hidden_dim,
-                height=MAX_BOARD_SIZE[0],
-                width=MAX_BOARD_SIZE[1],
+                height=MAP_SIZE[0],
+                width=MAP_SIZE[1],
                 mhsa_layer=RPSA(
                     in_channels=flags.hidden_dim,
                     heads=flags.n_heads,
-                    height=MAX_BOARD_SIZE[0],
-                    width=MAX_BOARD_SIZE[1]
+                    height=MAP_SIZE[0],
+                    width=MAP_SIZE[1]
                 ),
                 normalize=flags.normalize,
             ) for _ in range(flags.n_blocks)]
@@ -119,13 +119,13 @@ def _create_model(
             *[ViTBlock(
                 in_channels=flags.hidden_dim,
                 out_channels=flags.hidden_dim,
-                height=MAX_BOARD_SIZE[0],
-                width=MAX_BOARD_SIZE[1],
+                height=MAP_SIZE[0],
+                width=MAP_SIZE[1],
                 mhsa_layer=GPSA(
                     dim=flags.hidden_dim,
                     n_heads=flags.n_heads,
-                    height=MAX_BOARD_SIZE[0],
-                    width=MAX_BOARD_SIZE[1]
+                    height=MAP_SIZE[0],
+                    width=MAP_SIZE[1]
                 ),
                 normalize=flags.normalize,
             ) for _ in range(flags.n_blocks)]

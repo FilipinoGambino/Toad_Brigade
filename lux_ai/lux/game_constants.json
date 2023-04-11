@@ -1,0 +1,76 @@
+{
+  "ROBOT_TYPES": {
+    "LIGHT": 0,
+    "HEAVY": 1
+  },
+  "RESOURCE_TYPES": {
+    "ICE": "ice",
+    "ORE": "ore",
+    "WATER": "water",
+    "METAL": "metal",
+    "POWER": "power"
+  },
+  "RESOURCE_INTS": {
+    "ICE": 0,
+    "ORE": 1,
+    "WATER": 2,
+    "METAL": 3,
+    "POWER": 4
+  },
+  "DIRECTIONS": {
+    "CENTER": 0,
+    "UP": 1,
+    "RIGHT": 2,
+    "DOWN": 3,
+    "LEFT": 4
+  },
+  "PARAMETERS": {
+    "DAY_LENGTH": 30,
+    "NIGHT_LENGTH": 20,
+    "MAX_DAYS": 1000,
+    "MAX_TRANSFER": 3000,
+    "MAX_RUBBLE": 100,
+    "FACTORY_RUBBLE_AFTER_DESTRUCTION": 50,
+    "MIN_LICHEN_TO_SPREAD": 20,
+    "LICHEN_LOST_WITHOUT_WATER": 1,
+    "LICHEN_GAINED_WITH_WATER": 1,
+    "MAX_LICHEN_PER_TILE": 100,
+    "POWER_PER_CONNECTED_LICHEN_TILE": 1,
+    "LICHEN_WATERING_COST_FACTOR": 10,
+    "FACTORY_PROCESSING_RATE_WATER": 100,
+    "ICE_WATER_RATIO": 4,
+    "FACTORY_PROCESSING_RATE_METAL": 50,
+    "ORE_METAL_RATIO": 5,
+    "FACTORY_CHARGE": 50,
+    "FACTORY_WATER_CONSUMPTION": 1,
+    "POWER_LOSS_FACTOR": 0.5,
+    "BATTERY_CAPACITY": {
+      "LIGHT": 150,
+      "HEAVY": 3000
+    },
+    "CHARGE" : {
+      "LIGHT": 1,
+      "HEAVY": 10
+    },
+    "RESOURCE_CONVERSION": {
+      "ICE_TO_WATER": 4,
+      "ORE_TO_METAL": 5
+    },
+    "BUILD_COST_METAL": {
+      "LIGHT": 10,
+      "HEAVY": 100
+    },
+    "BUILD_COST_POWER": {
+      "LIGHT": 50,
+      "HEAVY": 500
+    },
+    "RESOURCE_CAPACITY": {
+      "LIGHT": 100,
+      "HEAVY": 3000
+    },
+    "DIG_RESOURCE_GAIN": {
+      "LIGHT": 2,
+      "HEAVY": 20
+    }
+  }
+}

@@ -17,10 +17,12 @@ import yaml
 
 from luxai_s2.env import LuxAI_S2
 from lux_ai.lux.game_state import GameState
+from ..nns import create_model
 
 from stable_baselines3.ppo import PPO
 from lux_ai.lux.config import EnvConfig
 from lux_ai.lux_gym.controller import LuxController
+
 # SimpleUnitObservationWrapper
 
 
@@ -29,6 +31,7 @@ from lux_ai.lux_gym.controller import LuxController
 # any files in the logs folder are not necessary. Make sure to exclude the .zip extension here
 MODEL_WEIGHTS_RELATIVE_PATH = "./best_model"
 RL_AGENT_CONFIG_PATH = Path(__file__).parent / "agent_config.yaml"
+MODEL_CONFIG_PATH = Path(__file__).parent / "model_config.yaml"
 
 
 def my_turn_to_place_factory(place_first: bool, step: int):
@@ -46,21 +49,32 @@ class Agent:
             self,
             player: str,
             env_cfg: EnvConfig,
-            controller: LuxController = None,
             policy: Any = None,
-            flags: SimpleNamespace = None,
     ) -> None:
-        self.agent_flags = flags
+        with open(RL_AGENT_CONFIG_PATH, 'r') as f:
+            self.agent_flags = SimpleNamespace(**yaml.full_load(f))
+        with open(MODEL_CONFIG_PATH, 'r') as f:
+            self.model_flags = SimpleNamespace(**yaml.full_load(f))
 
         self.my_id = player
         self.opp_id = "player_1" if self.my_id == "player_0" else "player_0"
+        int_id = int(self.my_id[-1])
+
+        if torch.cuda.is_available():
+            device_id = f"cuda:{min(int_id, torch.cuda.device_count() - 1)}"
+        else:
+            device_id = "cpu"
+        self.device = torch.device(device_id)
+
         np.random.seed(42)
         self.env_cfg: EnvConfig = env_cfg
         self.factories_to_place = self.env_cfg.MAX_FACTORIES
         self.bidding_done = False
-        self.controller = controller
+
+        self.controller = LuxController(self.env_cfg, self.agent_flags)
         self.policy = policy
-        self.flags = flags
+        self.model = create_model(self.model_flags, self.device)
+        print(self.model)
 
         # directory = osp.dirname(__file__)
         # self.policy = PPO.load(osp.join(directory, MODEL_WEIGHTS_RELATIVE_PATH))
@@ -137,8 +151,8 @@ class Agent:
             # logits[~action_mask] = -1e8  # mask out invalid actions
             # dist = torch.distributions.Categorical(logits=logits)
             # actions = dist.sample().cpu().numpy()  # shape (1, 1)
-            action_flag = self.flags.actions
-            map_flag = self.flags.map_shape
+            action_flag = self.agent_flags.actions
+            map_flag = self.agent_flags.map_shape
 
             action_maps = {
                 action: np.random.uniform(low=0, high=1, size=map_flag)
@@ -200,13 +214,13 @@ class Agent:
             tensors[key] = torch.from_numpy(tensors[key])
 
         return tensors
-
-
-
-    @property
-    def unwrapped_env(self):# -> LuxEnv:
-        return self.env.unwrapped[0]
-
-    @property
-    def game_state(self) -> GameState:
-        return self.unwrapped_env.game_state
+    #
+    #
+    #
+    # @property
+    # def unwrapped_env(self):# -> LuxEnv:
+    #     return self.env.unwrapped[0]
+    #
+    # @property
+    # def game_state(self) -> GameState:
+    #     return self.unwrapped_env.game_state

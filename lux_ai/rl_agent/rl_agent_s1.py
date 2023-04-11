@@ -11,7 +11,7 @@ from . import data_augmentation
 from ..lux_gym import create_reward_space, LuxEnv, wrappers
 from ..lux_gym.act_spaces import ACTION_MEANINGS
 from ..utils import DEBUG_MESSAGE, RUNTIME_DEBUG_MESSAGE, LOCAL_EVAL
-from ..utility_constants import MAX_RESEARCH, DN_CYCLE_LEN, MAX_BOARD_SIZE
+from ..utility_constants import MAX_RESEARCH, DN_CYCLE_LEN, MAP_SIZE
 from ..nns import create_model, models
 from ..utils import flags_to_namespace, Stopwatch
 
@@ -28,7 +28,7 @@ AGENT = None
 os.environ["OMP_NUM_THREADS"] = "1"
 
 
-def pos_to_loc(pos: Tuple[int, int], board_dims: Tuple[int, int] = MAX_BOARD_SIZE) -> int:
+def pos_to_loc(pos: Tuple[int, int], board_dims: Tuple[int, int] = MAP_SIZE) -> int:
     return pos[0] * board_dims[1] + pos[1]
 
 
@@ -86,7 +86,7 @@ class RLAgent:
         # Various utility properties
         self.me = self.game_state.players[obs.my_id]
         self.opp = self.game_state.players[(obs.my_id + 1) % 2]
-        self.my_city_tile_mat = np.zeros(MAX_BOARD_SIZE, dtype=bool)
+        self.my_city_tile_mat = np.zeros(MAP_SIZE, dtype=bool)
         # NB: loc = pos[0] * n_cols + pos[1]
         self.loc_to_actionable_city_tiles = {}
         self.loc_to_actionable_workers = {}
@@ -303,8 +303,8 @@ class RLAgent:
                         break
 
         # Then handle unit actions, ensuring that no units try to move to the same square
-        occupied_squares = np.zeros(MAX_BOARD_SIZE, dtype=bool)
-        max_loc_val = MAX_BOARD_SIZE[0] * MAX_BOARD_SIZE[1]
+        occupied_squares = np.zeros(MAP_SIZE, dtype=bool)
+        max_loc_val = MAP_SIZE[0] * MAP_SIZE[1]
         combined_unit_log_probs = torch.cat(
             [my_flat_log_probs["worker"].max(dim=-1)[0], my_flat_log_probs["cart"].max(dim=-1)[0]],
             dim=-1
@@ -354,7 +354,7 @@ class RLAgent:
 
         # Finally, get new actions from the modified log_probs
         actions_tensors = {
-            key: val.view(1, *val.shape[:-2], *MAX_BOARD_SIZE, -1).argsort(dim=-1, descending=True)
+            key: val.view(1, *val.shape[:-2], *MAP_SIZE, -1).argsort(dim=-1, descending=True)
             for key, val in flat_log_probs.items()
         }
         actions, _ = self.unwrapped_env.process_actions({

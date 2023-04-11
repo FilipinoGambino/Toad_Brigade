@@ -102,7 +102,9 @@ def obs_to_game_state(env_cfg: EnvConfig, obs: Dict[str, Any]):
         players[agent] = Player(
             **team_data,
             agent=agent,
-            lichen_count=team_lichen_count
+            lichen_count=team_lichen_count,
+            factory_count=len(factories[agent]),
+            robot_count=len(units[agent])
         )
 
     lichen_spreading = np.logical_and(

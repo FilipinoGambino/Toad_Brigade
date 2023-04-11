@@ -76,9 +76,6 @@ if __name__ == "__main__":
     np.set_printoptions(linewidth=sys.maxsize)
     np.set_printoptions(threshold=sys.maxsize)
 
-    with open(RL_AGENT_CONFIG_PATH, 'r') as f:
-        agent_flags = SimpleNamespace(**yaml.full_load(f))
-
     env = LuxAI_S2(collect_stats=True, verbose=4)
     env.env_cfg = env.state.env_cfg
     env.env_steps = env.state.env_steps
@@ -86,9 +83,7 @@ if __name__ == "__main__":
             player_id: Agent(
                 player_id,
                 env.env_cfg,
-                controller=LuxController(env.env_cfg, agent_flags),
                 policy=None,
-                flags=agent_flags,
             )
             for player_id in env.possible_agents
         }

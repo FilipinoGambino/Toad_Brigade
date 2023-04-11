@@ -27,6 +27,8 @@ class Player:
     agent: str
     factories_to_place: int # If tied, player_0's team has this True
     place_first: bool
+    robot_count: int = 0
+    factory_count: int = 0
     factory_strains: List[int] = field(default_factory=list)
     faction: FactionTypes = None
     water: int = 0

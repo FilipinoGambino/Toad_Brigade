@@ -7,6 +7,7 @@ import numpy as np
 import numpy.typing as npt
 from typing import Dict, List, Tuple, Any
 
+from lux_ai.lux.game_state import GameState
 from ..utility_constants import MAP_SIZE, MAX_FACTORIES, CYCLE_LENGTH
 
 # Player count
@@ -194,3 +195,41 @@ class _FixedShapeContinuousObsWrapper(gym.Wrapper):
     def get_dist_from_center_y(map_height: int, map_width: int) -> np.ndarray:
         pos = np.linspace(0, 2, map_height)[:, None].repeat(map_width, axis=1)
         return np.abs(1 - pos)[None, None, :, :]
+
+class MultiObs(BaseObsSpace):
+    def __init__(self, named_obs_spaces: Dict[str, BaseObsSpace], *args, **kwargs):
+        super(MultiObs, self).__init__(*args, **kwargs)
+        self.named_obs_spaces = named_obs_spaces
+
+    def get_obs_spec(
+            self,
+            board_dims: Tuple[int, int] = MAP_SIZE
+    ) -> gym.spaces.Dict:
+        return gym.spaces.Dict({
+            name + key: val
+            for name, obs_space in self.named_obs_spaces.items()
+            for key, val in obs_space.get_obs_spec(board_dims).spaces.items()
+        })
+
+    def wrap_env(self, env) -> gym.Wrapper:
+        return _MultiObsWrapper(env, self.named_obs_spaces)
+
+class _MultiObsWrapper(gym.Wrapper):
+    def __init__(self, env, named_obs_spaces: Dict[str, BaseObsSpace]):
+        super(_MultiObsWrapper, self).__init__(env)
+        self.named_obs_space_wrappers = {key: val.wrap_env(env) for key, val in named_obs_spaces.items()}
+
+    def reset(self, **kwargs):
+        observation, reward, done, info = self.env.reset(**kwargs)
+        return self.observation(observation), reward, done, info
+
+    def step(self, action):
+        observation, reward, done, info = self.env.step(action)
+        return self.observation(observation), reward, done, info
+
+    def observation(self, observation: GameState) -> Dict[str, np.ndarray]:
+        return {
+            name + key: val
+            for name, obs_space in self.named_obs_space_wrappers.items()
+            for key, val in obs_space.observation(observation).items()
+        }

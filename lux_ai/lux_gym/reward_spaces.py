@@ -1,123 +1,116 @@
-# from abc import ABC, abstractmethod
-# import copy
-# import logging
-# import numpy as np
-# from scipy.stats import rankdata
-# from typing import Dict, NamedTuple, NoReturn, Tuple
-#
-# from ..lux.game_state import Player
-#
-#
-# # def count_city_tiles(game_state: Game) -> np.ndarray:
-# #     return np.array([player.city_tile_count for player in game_state.players])
-# #
-# #
-# # def count_units(game_state: Game) -> np.ndarray:
-# #     return np.array([len(player.units) for player in game_state.players])
-# #
-# #
-# # def count_total_fuel(game_state: Game) -> np.ndarray:
-# #     return np.array([
-# #         sum([city.fuel for city in player.cities.values()])
-# #         for player in game_state.players
-# #     ])
-# #
-# #
-# # def count_research_points(game_state: Game) -> np.ndarray:
-# #     return np.array([player.research_points for player in game_state.players])
-# #
-# #
-# # def should_early_stop(game_state: Game) -> bool:
-# #     ct_count = count_city_tiles(game_state)
-# #     unit_count = count_units(game_state)
-# #     ct_pct = ct_count / max(ct_count.sum(), 1)
-# #     unit_pct = unit_count / max(unit_count.sum(), 1)
-# #     return ((ct_count == 0).any() or
-# #             (unit_count == 0).any() or
-# #             (ct_pct >= 0.75).any() or
-# #             (unit_pct >= 0.75).any())
-#
-#
-# class RewardSpec(NamedTuple):
-#     reward_min: float
-#     reward_max: float
-#     zero_sum: bool
-#     only_once: bool
-#
-#
-# # All reward spaces defined below
-#
-# class BaseRewardSpace(ABC):
-#     """
-#     A class used for defining a reward space and/or done state for either the full game or a sub-task
-#     """
-#     def __init__(self, **kwargs):
-#         if kwargs:
-#             logging.warning(f"RewardSpace received unexpected kwargs: {kwargs}")
-#
-#     @staticmethod
-#     @abstractmethod
-#     def get_reward_spec() -> RewardSpec:
-#         pass
-#
-#     @abstractmethod
-#     def compute_rewards_and_done(self, game_state: Game, done: bool) -> Tuple[Tuple[float, float], bool]:
-#         pass
-#
-#     def get_info(self) -> Dict[str, np.ndarray]:
-#         return {}
-#
-#
-# # Full game reward spaces defined below
-#
-# class FullGameRewardSpace(BaseRewardSpace):
-#     """
-#     A class used for defining a reward space for the full game.
-#     """
-#     def compute_rewards_and_done(self, game_state: Game, done: bool) -> Tuple[Tuple[float, float], bool]:
-#         return self.compute_rewards(game_state, done), done
-#
-#     @abstractmethod
-#     def compute_rewards(self, game_state: Game, done: bool) -> Tuple[float, float]:
-#         pass
-#
-#
-# class GameResultReward(FullGameRewardSpace):
-#     @staticmethod
-#     def get_reward_spec() -> RewardSpec:
-#         return RewardSpec(
-#             reward_min=-1.,
-#             reward_max=1.,
-#             zero_sum=True,
-#             only_once=True
-#         )
-#
-#     def __init__(self, early_stop: bool = False, **kwargs):
-#         super(GameResultReward, self).__init__(**kwargs)
-#         self.early_stop = early_stop
-#
-#     def compute_rewards_and_done(self, game_state: Game, done: bool) -> Tuple[Tuple[float, float], bool]:
-#         if self.early_stop:
-#             done = done or should_early_stop(game_state)
-#         return self.compute_rewards(game_state, done), done
-#
-#     def compute_rewards(self, game_state: Game, done: bool) -> Tuple[float, float]:
-#         if not done:
-#             return 0., 0.
-#
-#         # reward here is defined as the sum of number of city tiles with unit count as a tie-breaking mechanism
-#         rewards = [int(GameResultReward.compute_player_reward(p)) for p in game_state.players]
-#         # rankdata returns say (1, 2) for 1st and 2nd; - 1 returns (0, 1); * 2 returns (0, 2); - 1 returns (-1, 1)
-#         rewards = (rankdata(rewards) - 1.) * 2. - 1.
-#         return tuple(rewards)
-#
-#     @staticmethod
-#     def compute_player_reward(player: Player):
-#         lichen_count = player.lichen_count
-#         robot_count = player.robot_count
-#         return lichen_count * 10_000 + robot_count
-#
-#
+from abc import ABC, abstractmethod
+import copy
+import logging
+import numpy as np
+from scipy.stats import rankdata
+from typing import Dict, NamedTuple, NoReturn, Tuple
+
+from ..lux.game_state import Player, GameState
+
+
+def count_factories(game_state: GameState) -> np.ndarray:
+    return np.array([player.factory_count for player in game_state.players])
+
+
+def count_robots(game_state: GameState) -> np.ndarray:
+    return np.array([player.robot_count for player in game_state.players])
+
+
+def count_lichen(game_state: GameState) -> np.ndarray:
+    return np.array([player.lichen_count for player in game_state.players])
+
+
+def should_early_stop(game_state: GameState) -> bool:
+    ct_count = count_factories(game_state)
+    unit_count = count_robots(game_state)
+    ct_pct = ct_count / max(ct_count.sum(), 1)
+    unit_pct = unit_count / max(unit_count.sum(), 1)
+    return ((ct_count == 0).any() or
+            (unit_count == 0).any() or
+            (ct_pct >= 0.75).any() or
+            (unit_pct >= 0.75).any())
+
+
+class RewardSpec(NamedTuple):
+    reward_min: float
+    reward_max: float
+    zero_sum: bool
+    only_once: bool
+
+
+# All reward spaces defined below
+
+class BaseRewardSpace(ABC):
+    """
+    A class used for defining a reward space and/or done state for either the full game or a sub-task
+    """
+    def __init__(self, **kwargs):
+        if kwargs:
+            logging.warning(f"RewardSpace received unexpected kwargs: {kwargs}")
+
+    @staticmethod
+    @abstractmethod
+    def get_reward_spec() -> RewardSpec:
+        pass
+
+    @abstractmethod
+    def compute_rewards_and_done(self, game_state: GameState, done: bool) -> Tuple[Tuple[float, float], bool]:
+        pass
+
+    def get_info(self) -> Dict[str, np.ndarray]:
+        return {}
+
+
+# Full game reward spaces defined below
+
+class FullGameRewardSpace(BaseRewardSpace):
+    """
+    A class used for defining a reward space for the full game.
+    """
+    def compute_rewards_and_done(self, game_state: GameState, done: bool) -> Tuple[Tuple[float, float], bool]:
+        return self.compute_rewards(game_state, done), done
+
+    @abstractmethod
+    def compute_rewards(self, game_state: GameState, done: bool) -> Tuple[float, float]:
+        pass
+
+
+class GameResultReward(FullGameRewardSpace):
+    @staticmethod
+    def get_reward_spec() -> RewardSpec:
+        return RewardSpec(
+            reward_min=-1.,
+            reward_max=1.,
+            zero_sum=True,
+            only_once=True
+        )
+
+    def __init__(self, early_stop: bool = False, **kwargs):
+        super(GameResultReward, self).__init__(**kwargs)
+        self.early_stop = early_stop
+
+    def compute_rewards_and_done(self, game_state: GameState, done: bool) -> Tuple[Tuple[float, float], bool]:
+        if self.early_stop:
+            done = done or should_early_stop(game_state)
+        return self.compute_rewards(game_state, done), done
+
+    def compute_rewards(self, game_state: GameState, done: bool) -> Tuple[float, float]:
+        if not done:
+            return 0., 0.
+
+        # reward here is defined as the total lichen per player with robot count as a tie-breaking mechanism
+        rewards = [int(GameResultReward.compute_player_reward(p)) for p in game_state.players]
+        # i.e. reward = (1st, 2nd) => * 2 = (2, 4) => -3 = (-1, 1) or for ties reward = (2nd, 2nd) => (1, 1)
+        rewards = (rankdata(rewards)) * 2. - 3.
+        return tuple(rewards)
+
+    @staticmethod
+    def compute_player_reward(player: Player):
+        lichen_count = player.lichen_count
+        robot_count = player.robot_count
+        return lichen_count * 10_000 + robot_count
+
+
 # class CityTileReward(FullGameRewardSpace):
 #     @staticmethod
 #     def get_reward_spec() -> RewardSpec:
@@ -347,7 +340,7 @@
 # # NB: Subtasks that are "different enough" should be defined separately since each subtask gets its own embedding
 # # See obs_spaces.SUBTASK_ENCODING
 #
-# # TODO: Somehow include target locations for subtasks?
+# # _TODO: Somehow include target locations for subtasks?
 # class Subtask(BaseRewardSpace, ABC):
 #     @staticmethod
 #     def get_reward_spec() -> RewardSpec:

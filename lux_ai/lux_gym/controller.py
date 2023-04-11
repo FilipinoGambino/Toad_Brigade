@@ -268,7 +268,7 @@ class LuxController(Controller):
                 for robot_action in self.robot_actions:
                     if robot_action == 'pickup' and unit.on_factory_tile(obs):
                         for _,factory in obs.factories[agent].items():
-                            if factory.strain_id == obs.board.factory_occupancy_map[row,col]:
+                            if factory.strain_id == obs.board.factory_strains[row,col]:
                                 action_masks[robot_action][row, col] = True
                                 break
                         continue
